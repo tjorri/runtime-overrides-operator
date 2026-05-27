@@ -213,19 +213,25 @@ jobs:
           sbom-path: sbom-image.spdx.json
           push-to-registry: true
 
-      - name: Sync CRDs into chart + package
+      - name: Sync CRDs and package both charts
         env:
           CHART_VERSION: ${{ steps.version.outputs.chart_version }}
         run: |
           set -euo pipefail
+          # chart-sync regenerates CRDs into both charts (main + CRD-only)
+          # AND writes the aggregated dist/crds.yaml asset.
           make chart-sync
           helm package deploy/charts/runtime-overrides-operator \
             --version "${CHART_VERSION}" \
             --app-version "${CHART_VERSION}" \
             --destination dist/
+          helm package deploy/charts/runtime-overrides-operator-crds \
+            --version "${CHART_VERSION}" \
+            --app-version "${CHART_VERSION}" \
+            --destination dist/
           ls -la dist/
 
-      - name: Push chart to GHCR OCI
+      - name: Push operator chart to GHCR OCI
         id: chart-push
         env:
           CHART_VERSION: ${{ steps.version.outputs.chart_version }}
@@ -244,19 +250,48 @@ jobs:
           echo "chart_digest=${digest}" >> "$GITHUB_OUTPUT"
           echo "chart_ref=${CHART_REPO}/runtime-overrides-operator@${digest}" >> "$GITHUB_OUTPUT"
 
-      - name: Sign chart with cosign (keyless via OIDC)
+      - name: Sign operator chart with cosign (keyless via OIDC)
         env:
           CHART_REF: ${{ steps.chart-push.outputs.chart_ref }}
         run: cosign sign --yes "${CHART_REF}"
 
-      - name: Attest chart build provenance
+      - name: Attest operator chart build provenance
         uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v4.1.0
         with:
           subject-name: ${{ env.CHART_REPO }}/runtime-overrides-operator
           subject-digest: ${{ steps.chart-push.outputs.chart_digest }}
           push-to-registry: true
 
-      - name: Attach chart tarball to GitHub release
+      - name: Push CRD-only chart to GHCR OCI
+        id: crds-chart-push
+        env:
+          CHART_VERSION: ${{ steps.version.outputs.chart_version }}
+        run: |
+          set -euo pipefail
+          push_out=$(helm push "dist/runtime-overrides-operator-crds-${CHART_VERSION}.tgz" \
+            "oci://${CHART_REPO}" 2>&1)
+          echo "${push_out}"
+          digest=$(echo "${push_out}" | awk '/^Digest:/ {print $2}')
+          if [ -z "${digest}" ]; then
+            echo "helm push did not emit a Digest line; cannot sign CRD chart" >&2
+            exit 1
+          fi
+          echo "chart_digest=${digest}" >> "$GITHUB_OUTPUT"
+          echo "chart_ref=${CHART_REPO}/runtime-overrides-operator-crds@${digest}" >> "$GITHUB_OUTPUT"
+
+      - name: Sign CRD chart with cosign (keyless via OIDC)
+        env:
+          CHART_REF: ${{ steps.crds-chart-push.outputs.chart_ref }}
+        run: cosign sign --yes "${CHART_REF}"
+
+      - name: Attest CRD chart build provenance
+        uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v4.1.0
+        with:
+          subject-name: ${{ env.CHART_REPO }}/runtime-overrides-operator-crds
+          subject-digest: ${{ steps.crds-chart-push.outputs.chart_digest }}
+          push-to-registry: true
+
+      - name: Attach chart tarballs and aggregated crds.yaml to GitHub release
         env:
           GH_TOKEN:      ${{ secrets.GITHUB_TOKEN }}
           VERSION:       ${{ steps.version.outputs.version }}
@@ -265,15 +300,18 @@ jobs:
           set -euo pipefail
           gh release upload "${VERSION}" \
             "dist/runtime-overrides-operator-${CHART_VERSION}.tgz" \
+            "dist/runtime-overrides-operator-crds-${CHART_VERSION}.tgz" \
+            "dist/crds.yaml" \
             --clobber
 
       - name: Append install + verify footer to release notes
         env:
-          GH_TOKEN:      ${{ secrets.GITHUB_TOKEN }}
-          VERSION:       ${{ steps.version.outputs.version }}
-          CHART_VERSION: ${{ steps.version.outputs.chart_version }}
-          IMAGE:         ${{ steps.ko-build.outputs.image }}
-          CHART_REF:     ${{ steps.chart-push.outputs.chart_ref }}
+          GH_TOKEN:        ${{ secrets.GITHUB_TOKEN }}
+          VERSION:         ${{ steps.version.outputs.version }}
+          CHART_VERSION:   ${{ steps.version.outputs.chart_version }}
+          IMAGE:           ${{ steps.ko-build.outputs.image }}
+          CHART_REF:       ${{ steps.chart-push.outputs.chart_ref }}
+          CRDS_CHART_REF:  ${{ steps.crds-chart-push.outputs.chart_ref }}
         run: |
           set -euo pipefail
           # release-please owns the changelog body. We append a static
@@ -308,15 +346,50 @@ jobs:
 
           ## Install
 
+          Three patterns, pick the one that matches how you manage CRD lifecycle:
+
+          **A. One-command (CRDs bundled with the operator chart).**
+          Simplest for first install. Note that subsequent \`helm upgrade\`
+          will NOT update the CRDs themselves — Helm's bundled-CRDs path
+          doesn't reconcile schema changes. Fine for proofs of concept;
+          consider pattern B or C for production.
+
           \`\`\`sh
           helm install ro-op oci://${CHART_REPO}/runtime-overrides-operator \\
             --version ${CHART_VERSION} \\
             --namespace runtime-overrides-system --create-namespace
           \`\`\`
 
+          **B. Separate CRD chart (recommended for production).**
+          \`helm upgrade\` on each chart applies its respective resources,
+          including schema changes to the CRDs. The two charts version in
+          lockstep.
+
+          \`\`\`sh
+          helm install ro-op-crds oci://${CHART_REPO}/runtime-overrides-operator-crds \\
+            --version ${CHART_VERSION}
+          helm install ro-op oci://${CHART_REPO}/runtime-overrides-operator \\
+            --version ${CHART_VERSION} \\
+            --namespace runtime-overrides-system --create-namespace \\
+            --set crds.install=false
+          \`\`\`
+
+          **C. Raw CRD manifest (no Helm management of CRDs at all).**
+          Apply the per-release aggregated CRD YAML directly. Use this if
+          your platform pins CRD ownership outside of Helm (e.g. Argo CD,
+          Crossplane composition).
+
+          \`\`\`sh
+          kubectl apply -f https://github.com/${{ github.repository }}/releases/download/${VERSION}/crds.yaml
+          helm install ro-op oci://${CHART_REPO}/runtime-overrides-operator \\
+            --version ${CHART_VERSION} \\
+            --namespace runtime-overrides-system --create-namespace \\
+            --set crds.install=false
+          \`\`\`
+
           ## Verify the signatures
 
-          Both the image and the Helm chart are cosign-signed (keyless, via
+          The image and both Helm charts are cosign-signed (keyless, via
           GitHub OIDC). Verify each before installing:
 
           \`\`\`sh
@@ -327,16 +400,22 @@ jobs:
           cosign verify ${CHART_REF} \\
             --certificate-identity-regexp 'https://github.com/${{ github.repository }}/' \\
             --certificate-oidc-issuer https://token.actions.githubusercontent.com
+
+          cosign verify ${CRDS_CHART_REF} \\
+            --certificate-identity-regexp 'https://github.com/${{ github.repository }}/' \\
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com
           \`\`\`
 
           ## Verify the build provenance
 
-          Both artifacts carry a SLSA build-provenance attestation produced
-          by \`actions/attest-build-provenance\`. Verify with the GitHub CLI:
+          All three OCI artifacts carry a SLSA build-provenance attestation
+          produced by \`actions/attest-build-provenance\`. Verify with the
+          GitHub CLI:
 
           \`\`\`sh
           gh attestation verify oci://${IMAGE} --repo ${{ github.repository }}
           gh attestation verify oci://${CHART_REF} --repo ${{ github.repository }}
+          gh attestation verify oci://${CRDS_CHART_REF} --repo ${{ github.repository }}
           \`\`\`
 
           ## Software Bill of Materials (SBOM)

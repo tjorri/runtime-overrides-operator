@@ -1,0 +1,25 @@
+runtime-overrides-operator-crds {{ .Chart.Version }} installed as
+release "{{ .Release.Name }}".
+
+Installed CRDs:
+  • lokitenantoverrides.runtimeoverrides.io
+  • mimirtenantoverrides.runtimeoverrides.io
+
+NEXT STEP — install the operator chart with CRD installation DISABLED
+(otherwise the two charts will conflict on the same CRDs):
+
+  helm install ro-op oci://ghcr.io/tjorri/charts/runtime-overrides-operator \
+    --version {{ .Chart.AppVersion }} \
+    --namespace runtime-overrides-system --create-namespace \
+    --set crds.install=false
+
+Upgrade flow — bump THIS chart first, then the operator chart:
+
+  helm upgrade ro-op-crds oci://ghcr.io/tjorri/charts/runtime-overrides-operator-crds \
+    --version <new-version>
+  helm upgrade ro-op oci://ghcr.io/tjorri/charts/runtime-overrides-operator \
+    --version <new-version> \
+    --set crds.install=false
+
+The two charts are versioned in lockstep, so the chart versions and the
+operator image tag (appVersion) all move together.

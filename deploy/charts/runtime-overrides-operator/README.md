@@ -89,6 +89,8 @@ applied overrides until you delete those manually.
 | certManager.enabled | bool | `true` | Render the Certificate (and a self-signed Issuer if no `issuerRef` is set). |
 | certManager.issuerRef | object | `{}` — uses the chart's self-signed Issuer | Use an existing cluster issuer instead of the chart's self-signed Issuer. Set to `{name: my-issuer, kind: ClusterIssuer}` (or `Issuer`). |
 | commonLabels | object | `{}` | Labels applied to every resource the chart creates. |
+| crds | object | `{"install":true}` | CRD installation behavior. By default the main chart installs the `LokiTenantOverride` and `MimirTenantOverride` CRDs as Helm release resources. Set `crds.install: false` if you install the CRDs separately via the dedicated `runtime-overrides-operator-crds` chart (recommended for production: gives you explicit upgrade lifecycle via `helm upgrade`) or via raw `kubectl apply -f` from the per-release `crds.yaml` asset. |
+| crds.install | bool | `true` | Render and install the CRDs as part of this chart's release. Disable when installing the CRDs out-of-band. |
 | image | object | `{"pullPolicy":"IfNotPresent","pullSecrets":[],"repository":"ghcr.io/tjorri/runtime-overrides-operator","tag":""}` | The operator's container image. |
 | image.pullPolicy | string | `"IfNotPresent"` | Image pull policy. |
 | image.pullSecrets | list | `[]` | Image pull secrets if the image is in a private registry. |

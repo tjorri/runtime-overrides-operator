@@ -46,11 +46,29 @@ manifests: controller-gen ## Generate WebhookConfiguration, ClusterRole and Cust
 	"$(CONTROLLER_GEN)" rbac:roleName=manager-role crd webhook paths="./..." output:crd:artifacts:config=config/crd/bases
 
 .PHONY: chart-sync
-chart-sync: manifests ## Sync regenerated CRDs into the Helm chart templates.
+chart-sync: manifests ## Sync regenerated CRDs into both Helm charts + the release-asset crds.yaml.
+	@# Main chart: wrap each CRD with `{{ if .Values.crds.install }}` so the
+	@# operator chart can be installed without its CRDs (when the dedicated
+	@# runtime-overrides-operator-crds chart is in use instead).
+	@for crd in lokitenantoverride mimirtenantoverride ; do \
+	  src=config/crd/bases/runtimeoverrides.io_$${crd}s.yaml ; \
+	  dst=deploy/charts/runtime-overrides-operator/templates/crds/$${crd}.yaml ; \
+	  { printf '{{- if .Values.crds.install }}\n' ; \
+	    cat $$src ; \
+	    printf '{{- end }}\n' ; } > $$dst ; \
+	done
+	@# CRD-only chart: bare CRD YAML in templates/ so they're Helm release
+	@# resources and `helm upgrade` actually applies schema changes.
 	cp config/crd/bases/runtimeoverrides.io_lokitenantoverrides.yaml \
-	   deploy/charts/runtime-overrides-operator/templates/crds/lokitenantoverride.yaml
+	   deploy/charts/runtime-overrides-operator-crds/templates/lokitenantoverride.yaml
 	cp config/crd/bases/runtimeoverrides.io_mimirtenantoverrides.yaml \
-	   deploy/charts/runtime-overrides-operator/templates/crds/mimirtenantoverride.yaml
+	   deploy/charts/runtime-overrides-operator-crds/templates/mimirtenantoverride.yaml
+	@# Aggregated release asset: a single YAML for `kubectl apply -f` users.
+	@mkdir -p dist
+	@{ cat config/crd/bases/runtimeoverrides.io_lokitenantoverrides.yaml ; \
+	   printf '\n---\n' ; \
+	   cat config/crd/bases/runtimeoverrides.io_mimirtenantoverrides.yaml ; } > dist/crds.yaml
+	@echo "chart-sync: regenerated CRDs into both charts + dist/crds.yaml"
 
 .PHONY: check-image-consistency
 check-image-consistency: ## Assert .ko.yaml carries the required OCI labels.
@@ -62,30 +80,47 @@ check-image-consistency: ## Assert .ko.yaml carries the required OCI labels.
 	echo "Image build OK: .ko.yaml carries all 4 required OCI labels."
 
 .PHONY: chart-docs
-chart-docs: ## Regenerate the Helm chart README via helm-docs.
+chart-docs: ## Regenerate the Helm chart READMEs via helm-docs.
 	@command -v helm-docs >/dev/null \
 	  || { echo "helm-docs not installed; install from https://github.com/norwoodj/helm-docs" >&2; exit 1; }
 	helm-docs \
 	  --chart-search-root deploy/charts/runtime-overrides-operator \
 	  --template-files README.md.gotmpl \
 	  --output-file README.md
+	helm-docs \
+	  --chart-search-root deploy/charts/runtime-overrides-operator-crds \
+	  --template-files README.md.gotmpl \
+	  --output-file README.md
 
 .PHONY: chart-docs-check
-chart-docs-check: chart-docs ## Fail if the committed chart README is stale.
-	@git diff --exit-code deploy/charts/runtime-overrides-operator/README.md \
+chart-docs-check: chart-docs ## Fail if either committed chart README is stale.
+	@git diff --exit-code \
+	    deploy/charts/runtime-overrides-operator/README.md \
+	    deploy/charts/runtime-overrides-operator-crds/README.md \
 	  || { echo "chart README is stale — run 'make chart-docs' and commit the result" >&2; exit 1; }
 
 .PHONY: chart-lint
-chart-lint: chart-docs-check ## Lint, render, doc-check, and unit-test the Helm chart.
+chart-lint: chart-docs-check ## Lint, render, doc-check, and unit-test both Helm charts.
+	@# Main chart — default values + Mimir-enabled variant.
 	helm lint deploy/charts/runtime-overrides-operator/
 	helm template ro-op deploy/charts/runtime-overrides-operator/ \
 	  --namespace runtime-overrides-system > /dev/null
 	helm template ro-op deploy/charts/runtime-overrides-operator/ \
 	  --namespace runtime-overrides-system \
 	  --set operator.targets.mimir.enabled=true > /dev/null
+	@# Main chart with CRDs disabled — used in tandem with the CRD chart.
+	helm template ro-op deploy/charts/runtime-overrides-operator/ \
+	  --namespace runtime-overrides-system \
+	  --set crds.install=false > /dev/null
+	@# CRD-only chart.
+	helm lint deploy/charts/runtime-overrides-operator-crds/
+	helm template ro-op-crds deploy/charts/runtime-overrides-operator-crds/ > /dev/null
 	@command -v helm >/dev/null && helm plugin list 2>/dev/null | grep -q '^unittest' \
 	  || { echo "helm unittest plugin not installed; skipping unittest"; exit 0; }
 	helm unittest deploy/charts/runtime-overrides-operator/
+	@test -d deploy/charts/runtime-overrides-operator-crds/tests \
+	  && helm unittest deploy/charts/runtime-overrides-operator-crds/ \
+	  || echo "no helm-unittest suite for the CRD chart yet; skipping"
 
 .PHONY: generate
 generate: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.

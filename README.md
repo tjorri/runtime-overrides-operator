@@ -42,13 +42,45 @@ explicit weight-based precedence.
 
 ### Install
 
+Three patterns, pick the one that matches how you manage CRD lifecycle.
+See [ADR 0006](docs/adr/0006-crd-chart-split.md) for the rationale.
+
+**A. One-command (CRDs bundled with the operator chart).**
+Easiest for first install. `helm upgrade` will NOT update the CRDs
+later — fine for proofs of concept, consider B or C for production.
+
 ```sh
 helm install ro-op oci://ghcr.io/tjorri/charts/runtime-overrides-operator \
   --version 0.1.0 \
   --namespace runtime-overrides-system --create-namespace
 ```
 
-By default this enables the Loki reconciler with output ConfigMap
+**B. Separate CRD chart (recommended for production).**
+`helm upgrade` on each chart applies its respective resources, including
+CRD schema changes. Charts are versioned in lockstep.
+
+```sh
+helm install ro-op-crds oci://ghcr.io/tjorri/charts/runtime-overrides-operator-crds \
+  --version 0.1.0
+helm install ro-op oci://ghcr.io/tjorri/charts/runtime-overrides-operator \
+  --version 0.1.0 \
+  --namespace runtime-overrides-system --create-namespace \
+  --set crds.install=false
+```
+
+**C. Raw CRD manifest (CRDs managed outside Helm).**
+Apply the per-release aggregated CRD YAML directly. Use this if your
+platform pins CRD ownership outside Helm (Argo CD, Crossplane, etc).
+
+```sh
+kubectl apply -f https://github.com/tjorri/runtime-overrides-operator/releases/download/v0.1.0/crds.yaml
+helm install ro-op oci://ghcr.io/tjorri/charts/runtime-overrides-operator \
+  --version 0.1.0 \
+  --namespace runtime-overrides-system --create-namespace \
+  --set crds.install=false
+```
+
+All three patterns default to the Loki reconciler with output ConfigMap
 `monitoring/loki-runtime-tenants`. To enable Mimir as well, pass:
 
 ```sh

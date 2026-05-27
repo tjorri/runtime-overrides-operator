@@ -1,0 +1,27 @@
+apiVersion: v2
+name: runtime-overrides-operator-crds
+description: |
+  CustomResourceDefinitions for runtime-overrides-operator
+  (LokiTenantOverride, MimirTenantOverride). Installed as Helm release
+  resources so `helm upgrade` actually applies schema changes — see
+  ADR 0006 for why this is a separate chart from the operator.
+
+  Apache-2.0 licensed.
+type: application
+version: 0.1.0
+appVersion: 0.1.0
+kubeVersion: '>= 1.30.0-0'
+home: https://github.com/tjorri/runtime-overrides-operator
+sources:
+  - https://github.com/tjorri/runtime-overrides-operator
+maintainers:
+  - name: tjorri
+keywords:
+  - grafana
+  - loki
+  - mimir
+  - crds
+  - multi-tenant
+annotations:
+  artifacthub.io/license: Apache-2.0
+  artifacthub.io/prerelease: 'true'

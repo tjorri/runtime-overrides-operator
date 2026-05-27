@@ -1,0 +1,14 @@
+# SPDX-License-Identifier: Apache-2.0
+# Default values for runtime-overrides-operator-crds.
+#
+# This chart installs only the CustomResourceDefinitions that the
+# operator chart depends on. It exists to give users explicit upgrade-
+# lifecycle control for the CRDs — `helm upgrade` updates Helm-managed
+# resources in `templates/` but not CRDs installed via the special
+# `crds/` directory or the bundled-CRDs path. By installing the CRDs
+# as their own Helm release we sidestep that limitation.
+#
+# The chart has no values to configure today — the CRDs ship as-is from
+# `controller-gen`. If you need to add labels or annotations to the
+# installed CRDs, use `helm install --post-renderer` or apply them
+# directly with `kubectl label crd`.

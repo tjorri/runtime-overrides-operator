@@ -1,0 +1,46 @@
+# SPDX-License-Identifier: Apache-2.0
+# helm-unittest tests for the `crds.install` toggle. Pin the contract:
+# default `true` renders both CRDs; setting `false` elides them entirely
+# (for users who install the dedicated runtime-overrides-operator-crds
+# chart or apply the aggregated crds.yaml manifest themselves).
+suite: crds-install-toggle
+templates:
+  - templates/crds/lokitenantoverride.yaml
+  - templates/crds/mimirtenantoverride.yaml
+release:
+  name: ro-op
+  namespace: runtime-overrides-system
+tests:
+  - it: renders both CRDs by default (crds.install=true)
+    asserts:
+      - hasDocuments:
+          count: 1
+        template: templates/crds/lokitenantoverride.yaml
+      - hasDocuments:
+          count: 1
+        template: templates/crds/mimirtenantoverride.yaml
+      - isKind:
+          of: CustomResourceDefinition
+        template: templates/crds/lokitenantoverride.yaml
+      - isKind:
+          of: CustomResourceDefinition
+        template: templates/crds/mimirtenantoverride.yaml
+      - equal:
+          path: metadata.name
+          value: lokitenantoverrides.runtimeoverrides.io
+        template: templates/crds/lokitenantoverride.yaml
+      - equal:
+          path: metadata.name
+          value: mimirtenantoverrides.runtimeoverrides.io
+        template: templates/crds/mimirtenantoverride.yaml
+
+  - it: omits both CRDs when crds.install=false
+    set:
+      crds.install: false
+    asserts:
+      - hasDocuments:
+          count: 0
+        template: templates/crds/lokitenantoverride.yaml
+      - hasDocuments:
+          count: 0
+        template: templates/crds/mimirtenantoverride.yaml
