@@ -124,8 +124,12 @@ setup-test-e2e: ## Set up a Kind cluster for e2e tests if it does not exist
 	esac
 
 .PHONY: test-e2e
+# -timeout=25m overrides go test's 10m default. On local hardware the
+# suite finishes in ~5min; GitHub-hosted runners can stretch to ~12-15min
+# when test 03/05/13 each hit close to the 180s propagationWait ceiling.
+# 25m gives meaningful headroom for slow runs plus AfterSuite teardown.
 test-e2e: setup-test-e2e manifests generate fmt vet ## Run the e2e tests. Expected an isolated environment using Kind.
-	KIND=$(KIND) KIND_CLUSTER=$(KIND_CLUSTER) go test -tags=e2e ./test/e2e/ -v -ginkgo.v
+	KIND=$(KIND) KIND_CLUSTER=$(KIND_CLUSTER) go test -tags=e2e ./test/e2e/ -v -timeout=25m -ginkgo.v
 	$(MAKE) cleanup-test-e2e
 
 .PHONY: cleanup-test-e2e
