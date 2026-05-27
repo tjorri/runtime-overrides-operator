@@ -31,6 +31,16 @@
           "type": "yaml",
           "path": "deploy/charts/runtime-overrides-operator/Chart.yaml",
           "jsonpath": "$.appVersion"
+        },
+        {
+          "type": "yaml",
+          "path": "deploy/charts/runtime-overrides-operator-crds/Chart.yaml",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "yaml",
+          "path": "deploy/charts/runtime-overrides-operator-crds/Chart.yaml",
+          "jsonpath": "$.appVersion"
         }
       ]
     }

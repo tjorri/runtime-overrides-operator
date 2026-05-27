@@ -1,0 +1,51 @@
+# SPDX-License-Identifier: Apache-2.0
+# helm-unittest tests for the dedicated CRD-only chart. Pins that both
+# CRDs are emitted as Helm release resources (i.e. tracked in the
+# manifest so `helm upgrade` updates them, which is the whole point of
+# this chart's existence — see ADR 0006).
+suite: crds
+templates:
+  - templates/lokitenantoverride.yaml
+  - templates/mimirtenantoverride.yaml
+release:
+  name: ro-op-crds
+tests:
+  - it: emits the LokiTenantOverride CRD
+    template: templates/lokitenantoverride.yaml
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: CustomResourceDefinition
+      - equal:
+          path: metadata.name
+          value: lokitenantoverrides.runtimeoverrides.io
+      - equal:
+          path: spec.group
+          value: runtimeoverrides.io
+      - equal:
+          path: spec.scope
+          value: Namespaced
+      - equal:
+          path: spec.names.kind
+          value: LokiTenantOverride
+
+  - it: emits the MimirTenantOverride CRD
+    template: templates/mimirtenantoverride.yaml
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: CustomResourceDefinition
+      - equal:
+          path: metadata.name
+          value: mimirtenantoverrides.runtimeoverrides.io
+      - equal:
+          path: spec.group
+          value: runtimeoverrides.io
+      - equal:
+          path: spec.scope
+          value: Namespaced
+      - equal:
+          path: spec.names.kind
+          value: MimirTenantOverride

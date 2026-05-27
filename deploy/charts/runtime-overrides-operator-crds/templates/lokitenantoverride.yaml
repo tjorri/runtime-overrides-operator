@@ -1,20 +1,19 @@
-{{- if .Values.crds.install }}
 ---
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.21.0
-  name: mimirtenantoverrides.runtimeoverrides.io
+  name: lokitenantoverrides.runtimeoverrides.io
 spec:
   group: runtimeoverrides.io
   names:
-    kind: MimirTenantOverride
-    listKind: MimirTenantOverrideList
-    plural: mimirtenantoverrides
+    kind: LokiTenantOverride
+    listKind: LokiTenantOverrideList
+    plural: lokitenantoverrides
     shortNames:
-    - mto
-    singular: mimirtenantoverride
+    - lto
+    singular: lokitenantoverride
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
@@ -36,8 +35,8 @@ spec:
     name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: MimirTenantOverride is a per-tenant runtime override contribution
-          for Mimir.
+        description: LokiTenantOverride is a per-tenant runtime override contribution
+          for Loki.
         properties:
           apiVersion:
             description: |-
@@ -57,13 +56,13 @@ spec:
           metadata:
             type: object
           spec:
-            description: spec defines the desired state of MimirTenantOverride
+            description: spec defines the desired state of LokiTenantOverride
             properties:
               overrides:
                 description: |-
                   Overrides is the freeform map deep-merged into the tenant's stanza
                   of the merged output ConfigMap. Schema is preserve-unknown-fields;
-                  validation against Mimir's upstream Limits happens in the admission
+                  validation against Loki's upstream Limits happens in the admission
                   webhook and in the controller.
                 type: object
                 x-kubernetes-preserve-unknown-fields: true
@@ -87,7 +86,7 @@ spec:
             - overrides
             type: object
           status:
-            description: status defines the observed state of MimirTenantOverride
+            description: status defines the observed state of LokiTenantOverride
             properties:
               conditions:
                 description: 'Conditions: see common_types.go for the type/reason
@@ -152,7 +151,7 @@ spec:
                 x-kubernetes-list-type: map
               contributingPeers:
                 description: |-
-                  ContributingPeers lists other MimirTenantOverride CRs that target
+                  ContributingPeers lists other LokiTenantOverride CRs that target
                   the same tenantId.
                 items:
                   description: |-
@@ -195,4 +194,3 @@ spec:
     storage: true
     subresources:
       status: {}
-{{- end }}

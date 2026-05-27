@@ -31,3 +31,6 @@ go.work
 
 # e2e artifact dumps written by AfterSuite (operator/loki/mimir logs + cluster state)
 artifacts/
+
+# Build artifacts written by chart-sync (aggregated crds.yaml) and helm package
+dist/
