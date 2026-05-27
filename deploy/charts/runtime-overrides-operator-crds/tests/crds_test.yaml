@@ -49,3 +49,14 @@ tests:
       - equal:
           path: spec.names.kind
           value: MimirTenantOverride
+
+  - it: each CRD carries helm.sh/resource-policy=keep so `helm uninstall` does not delete CRs
+    asserts:
+      - equal:
+          path: metadata.annotations["helm.sh/resource-policy"]
+          value: keep
+        template: templates/lokitenantoverride.yaml
+      - equal:
+          path: metadata.annotations["helm.sh/resource-policy"]
+          value: keep
+        template: templates/mimirtenantoverride.yaml

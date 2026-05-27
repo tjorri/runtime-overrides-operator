@@ -47,23 +47,31 @@ manifests: controller-gen ## Generate WebhookConfiguration, ClusterRole and Cust
 
 .PHONY: chart-sync
 chart-sync: manifests ## Sync regenerated CRDs into both Helm charts + the release-asset crds.yaml.
-	@# Main chart: wrap each CRD with `{{ if .Values.crds.install }}` so the
-	@# operator chart can be installed without its CRDs (when the dedicated
-	@# runtime-overrides-operator-crds chart is in use instead).
-	@for crd in lokitenantoverride mimirtenantoverride ; do \
+	@# Helm-managed CRDs in both charts carry `helm.sh/resource-policy: keep`
+	@# so that `helm upgrade --set crds.install=false` (migrating from
+	@# bundled CRDs to the dedicated CRD chart) and `helm uninstall` do NOT
+	@# delete the CRDs from the cluster — deleting a CRD cascade-deletes
+	@# every CR of that kind, which would silently wipe every tenant
+	@# override. The annotation has no effect on UPDATE behavior, so
+	@# schema changes still propagate via `helm upgrade`. Users who
+	@# actually want to remove the CRDs do so explicitly with kubectl.
+	@# The aggregated dist/crds.yaml asset does not get the annotation
+	@# because it's not Helm-managed.
+	@awk_keep='/^  annotations:$$/ {print; print "    helm.sh/resource-policy: keep"; next} {print}' ; \
+	for crd in lokitenantoverride mimirtenantoverride ; do \
 	  src=config/crd/bases/runtimeoverrides.io_$${crd}s.yaml ; \
-	  dst=deploy/charts/runtime-overrides-operator/templates/crds/$${crd}.yaml ; \
+	  main_dst=deploy/charts/runtime-overrides-operator/templates/crds/$${crd}.yaml ; \
+	  crds_dst=deploy/charts/runtime-overrides-operator-crds/templates/$${crd}.yaml ; \
+	  awk "$$awk_keep" $$src > $$src.keep.tmp ; \
 	  { printf '{{- if .Values.crds.install }}\n' ; \
-	    cat $$src ; \
-	    printf '{{- end }}\n' ; } > $$dst ; \
+	    cat $$src.keep.tmp ; \
+	    printf '{{- end }}\n' ; } > $$main_dst ; \
+	  cp $$src.keep.tmp $$crds_dst ; \
+	  rm -f $$src.keep.tmp ; \
 	done
-	@# CRD-only chart: bare CRD YAML in templates/ so they're Helm release
-	@# resources and `helm upgrade` actually applies schema changes.
-	cp config/crd/bases/runtimeoverrides.io_lokitenantoverrides.yaml \
-	   deploy/charts/runtime-overrides-operator-crds/templates/lokitenantoverride.yaml
-	cp config/crd/bases/runtimeoverrides.io_mimirtenantoverrides.yaml \
-	   deploy/charts/runtime-overrides-operator-crds/templates/mimirtenantoverride.yaml
 	@# Aggregated release asset: a single YAML for `kubectl apply -f` users.
+	@# Bare CRD YAML — no helm.sh annotation since this asset is not used
+	@# by Helm.
 	@mkdir -p dist
 	@{ cat config/crd/bases/runtimeoverrides.io_lokitenantoverrides.yaml ; \
 	   printf '\n---\n' ; \

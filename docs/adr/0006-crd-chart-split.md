@@ -92,6 +92,22 @@ installs. Users who care about upgrade lifecycle pay one extra flag
   the sync, (b) copies the bare CRD YAML into the CRD chart's
   `templates/`, and (c) writes the aggregated `dist/crds.yaml`. All
   three artifacts stay in sync from a single `controller-gen` run.
+- The Helm-managed CRDs in both charts carry
+  `helm.sh/resource-policy: keep` (injected by `chart-sync` into the
+  controller-gen-emitted `metadata.annotations` block). This is the
+  load-bearing safety net for the lifecycle story above: without it,
+  `helm upgrade --set crds.install=false` (the migration step from the
+  bundled-CRDs install to the dedicated CRD chart) would remove the
+  CRDs from the chart's manifest tracking and Helm would then DELETE
+  them from the cluster, which cascade-deletes every `LokiTenantOverride`
+  / `MimirTenantOverride` CR. The annotation tells Helm to leave the
+  CRDs in place on resource-removal and on `helm uninstall`; it does
+  NOT affect `helm upgrade`'s normal update behavior, so CRD schema
+  changes still propagate. Users who explicitly want the CRDs gone
+  use `kubectl delete crd` directly. The aggregated `dist/crds.yaml`
+  release asset does not get the annotation because it isn't Helm-
+  managed. This matches the convention used by cert-manager-crds,
+  kube-prometheus-stack, Linkerd, and others.
 - `make chart-lint` runs `helm lint` + `helm template` against both
   charts and runs `helm unittest` against both. The chart-unittest
   suite for the new CRD chart covers the two CRDs' identity (kind,
