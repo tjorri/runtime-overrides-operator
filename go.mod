@@ -309,7 +309,7 @@ replace github.com/prometheus/prometheus => github.com/grafana/mimir-prometheus 
 
 replace github.com/hashicorp/memberlist => github.com/grafana/memberlist v0.3.1-0.20260515134459-1798cf41aca7
 
-replace go.yaml.in/yaml/v3 => github.com/grafana/go-yaml/v3 v3.0.0-20260130164322-e3c24e8f4c87
+replace go.yaml.in/yaml/v3 => github.com/grafana/go-yaml/v3 a472fc4f55bb
 
 replace github.com/munnerz/goautoneg => github.com/grafana/goautoneg v0.0.0-20240607115440-f335c04c58ce
 
