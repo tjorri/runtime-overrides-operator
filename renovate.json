@@ -38,6 +38,20 @@
       "schedule": ["after 1am and before 7am on monday"]
     },
     {
+      "matchManagers": ["gomod"],
+      "matchPackageNames": [
+        "github.com/grafana/mimir-prometheus",
+        "github.com/grafana/memberlist",
+        "github.com/grafana/go-yaml/v3",
+        "github.com/grafana/goautoneg",
+        "github.com/grafana/opentracing-contrib-go-stdlib",
+        "github.com/charleskorn/go-grpc",
+        "github.com/grafana/mimir-otlptranslator"
+      ],
+      "enabled": false,
+      "description": "These are upstream-fork pins in go.mod `replace` directives that coordinate with the Loki and Mimir bumps. `go mod tidy` refreshes them as a side effect of bumping grafana/loki/v3 or grafana/mimir — Renovate should not propose them independently. PR #2 (closed) demonstrated this: Renovate proposed a digest where the fork had already moved to v4, breaking the v3 replace."
+    },
+    {
       "matchManagers": ["github-actions"],
       "groupName": "github actions",
       "pinDigests": true,
