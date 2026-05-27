@@ -29,6 +29,12 @@
     },
     {
       "matchManagers": ["gomod"],
+      "matchPackageNames": ["gopkg.in/yaml.v2"],
+      "enabled": false,
+      "description": "gopkg.in/yaml.v2 and gopkg.in/yaml.v3 are SEPARATE Go modules under semver-import-versioning — the vN is part of the module path, not just a version tag. The project deliberately imports both: yaml.v2 because Loki's upstream Limits API uses it; yaml.v3 (and go.yaml.in/yaml/v3) for Mimir's. Renovate misinterprets v2 → v3 as a major version bump for the same module and produces an invalid go.mod (PR #10, closed). gopkg.in/yaml.v2 is in maintenance mode and unlikely to see further releases anyway."
+    },
+    {
+      "matchManagers": ["gomod"],
       "matchUpdateTypes": ["major"],
       "labels": ["dependencies", "major"],
       "automerge": false
