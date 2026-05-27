@@ -35,6 +35,11 @@ const helmReleaseName = "ro-op"
 // Helm values file relative to the test package.
 var manifestsDir string
 
+// repoRoot is the absolute path to the repository root. Set in BeforeSuite;
+// AfterSuite uses it to write cluster diagnostic artifacts before teardown
+// (artifacts/{operator,loki,mimir}.log + events.txt + pods.txt).
+var repoRoot string
+
 // Optional environment variables:
 //   - CERT_MANAGER_INSTALL_SKIP=true: assume cert-manager is already there.
 //   - E2E_SKIP_IMAGE_BUILD=true:      assume the operator image is already
@@ -98,7 +103,7 @@ var _ = BeforeSuite(func() {
 	_, err = utils.Run(applyCmd)
 	Expect(err).NotTo(HaveOccurred())
 
-	repoRoot, err := filepath.Abs(filepath.Join(wd, "..", ".."))
+	repoRoot, err = filepath.Abs(filepath.Join(wd, "..", ".."))
 	Expect(err).NotTo(HaveOccurred())
 	chartPath := filepath.Join(repoRoot, "deploy", "charts", "runtime-overrides-operator")
 	valuesPath := filepath.Join(manifestsDir, "operator-values.yaml")
@@ -118,6 +123,16 @@ var _ = BeforeSuite(func() {
 })
 
 var _ = AfterSuite(func() {
+	// Dump cluster diagnostics BEFORE teardown so failures stay
+	// reproducible. The previous design relied on a post-step in the
+	// GitHub Actions workflow that ran AFTER `make test-e2e` exited —
+	// by which point the operator/Loki/Mimir pods had already been
+	// deleted, leaving the artifacts empty. This now runs while the
+	// cluster is still intact, on every run; the workflow only uploads
+	// the artifacts on failure, and the artifacts/ directory is
+	// gitignored locally.
+	dumpClusterArtifacts()
+
 	if os.Getenv("E2E_SKIP_TEARDOWN") == "true" {
 		_, _ = fmt.Fprintln(GinkgoWriter, "E2E_SKIP_TEARDOWN=true; leaving cluster state in place")
 		return
@@ -136,3 +151,46 @@ var _ = AfterSuite(func() {
 		utils.UninstallCertManager()
 	}
 })
+
+// dumpClusterArtifacts captures the operator, Loki, and Mimir pod logs
+// plus cluster-wide events and pod listing into <repoRoot>/artifacts/.
+// Best-effort: any individual command failure (typically because the
+// resource doesn't exist on early-bootstrap suite failures) is logged
+// but doesn't propagate. Files are overwritten on each run.
+func dumpClusterArtifacts() {
+	if repoRoot == "" {
+		_, _ = fmt.Fprintln(GinkgoWriter, "dumpClusterArtifacts: repoRoot not set; skipping")
+		return
+	}
+	dir := filepath.Join(repoRoot, "artifacts")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		_, _ = fmt.Fprintf(GinkgoWriter, "dumpClusterArtifacts: mkdir %s: %v\n", dir, err)
+		return
+	}
+
+	dumps := []struct {
+		path string
+		args []string
+	}{
+		{"pods.txt", []string{"get", "pods", "-A", "-o", "wide"}},
+		{"events.txt", []string{"get", "events", "-A", "--sort-by=.lastTimestamp"}},
+		{"operator.log", []string{
+			"-n", operatorNamespace, "logs",
+			"-l", "app.kubernetes.io/name=runtime-overrides-operator",
+			"--all-containers", "--tail=-1",
+		}},
+		{"loki.log", []string{"-n", "loki", "logs", "deploy/loki", "--tail=-1"}},
+		{"mimir.log", []string{"-n", "mimir", "logs", "deploy/mimir", "--tail=-1"}},
+	}
+	for _, d := range dumps {
+		out, err := utils.Run(exec.Command("kubectl", d.args...))
+		if err != nil {
+			_, _ = fmt.Fprintf(GinkgoWriter, "dumpClusterArtifacts: kubectl %v: %v\n", d.args, err)
+			continue
+		}
+		path := filepath.Join(dir, d.path)
+		if err := os.WriteFile(path, []byte(out), 0o644); err != nil {
+			_, _ = fmt.Fprintf(GinkgoWriter, "dumpClusterArtifacts: write %s: %v\n", path, err)
+		}
+	}
+}

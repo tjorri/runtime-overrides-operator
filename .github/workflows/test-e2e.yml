@@ -53,16 +53,11 @@ jobs:
           go mod tidy
           make test-e2e
 
-      - name: Collect operator logs on failure
-        if: failure()
-        run: |
-          mkdir -p artifacts
-          kubectl get pods -A -o wide > artifacts/pods.txt || true
-          kubectl get events -A --sort-by='.lastTimestamp' > artifacts/events.txt || true
-          kubectl -n runtime-overrides-operator-system logs -l app.kubernetes.io/name=runtime-overrides-operator --all-containers --tail=-1 > artifacts/operator.log || true
-          kubectl -n loki logs deploy/loki --tail=-1 > artifacts/loki.log || true
-          kubectl -n mimir logs deploy/mimir --tail=-1 > artifacts/mimir.log || true
-
+      # Cluster diagnostics (pod logs, events, pod listing) are dumped by
+      # the e2e suite's AfterSuite to ./artifacts/ BEFORE the cluster
+      # teardown. Doing it inline keeps the artifacts populated even when
+      # the suite fails — the previous post-job kubectl-logs step ran
+      # after the pods had already been deleted and produced empty files.
       - name: Upload artifacts on failure
         if: failure()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

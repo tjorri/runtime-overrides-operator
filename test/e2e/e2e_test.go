@@ -24,8 +24,14 @@ import (
 )
 
 const (
-	testTenantNs    = "test-tenant-a"
-	propagationWait = 90 * time.Second
+	testTenantNs = "test-tenant-a"
+	// propagationWait is the upper bound on end-to-end propagation:
+	// operator writes the output ConfigMap → kubelet ConfigMap sync (up
+	// to ~60s on Kubernetes default) → dskit runtime_config poll (every
+	// 10s). On a quiet cluster this stacks to ~70-90s; under GitHub-
+	// hosted-runner load we've seen it stretch closer to that ceiling.
+	// 180s gives 2× headroom over the p99 we measured locally.
+	propagationWait = 180 * time.Second
 	pollInterval    = 2 * time.Second
 )
 
