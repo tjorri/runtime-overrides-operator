@@ -23,6 +23,12 @@
     },
     {
       "matchManagers": ["gomod"],
+      "matchPackageNames": ["github.com/grafana/mimir"],
+      "allowedVersions": ">=2.0.0",
+      "description": "github.com/grafana/mimir was forked from Cortex in 2022 and started its own versioning at v2.0.0. The pre-fork v1.x tags still exist in the repo but declare their module path as github.com/cortexproject/cortex, so Go module resolution refuses to import them as github.com/grafana/mimir. Constrain Renovate to true Mimir versions only — PR #8 (closed) demonstrated this when Renovate proposed v1.10.0."
+    },
+    {
+      "matchManagers": ["gomod"],
       "matchUpdateTypes": ["major"],
       "labels": ["dependencies", "major"],
       "automerge": false
