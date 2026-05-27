@@ -44,3 +44,14 @@ tests:
       - hasDocuments:
           count: 0
         template: templates/crds/mimirtenantoverride.yaml
+
+  - it: each CRD carries helm.sh/resource-policy=keep so helm upgrade --set crds.install=false does not delete CRs
+    asserts:
+      - equal:
+          path: metadata.annotations["helm.sh/resource-policy"]
+          value: keep
+        template: templates/crds/lokitenantoverride.yaml
+      - equal:
+          path: metadata.annotations["helm.sh/resource-policy"]
+          value: keep
+        template: templates/crds/mimirtenantoverride.yaml
