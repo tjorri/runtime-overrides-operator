@@ -1,0 +1,19 @@
+# SPDX-License-Identifier: Apache-2.0
+{{- if and .Values.operator.webhook.enabled (or .Values.operator.targets.loki.enabled .Values.operator.targets.mimir.enabled) }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "operator.webhookServiceName" . }}
+  namespace: {{ include "operator.namespace" . }}
+  labels:
+    {{- include "operator.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  ports:
+    - port: 443
+      targetPort: webhook
+      protocol: TCP
+      name: https
+  selector:
+    {{- include "operator.selectorLabels" . | nindent 4 }}
+{{- end }}

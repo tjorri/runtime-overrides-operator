@@ -1,0 +1,40 @@
+# SPDX-License-Identifier: Apache-2.0
+# cert-manager Issuer + Certificate for the webhook server.
+# When users have an existing cluster issuer they want to use, they set
+# certManager.issuerRef to point at it and the self-signed Issuer here
+# isn't rendered.
+{{- if and .Values.operator.webhook.enabled .Values.certManager.enabled (or .Values.operator.targets.loki.enabled .Values.operator.targets.mimir.enabled) }}
+{{- if not .Values.certManager.issuerRef.name }}
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: {{ include "operator.webhookIssuerName" . }}
+  namespace: {{ include "operator.namespace" . }}
+  labels:
+    {{- include "operator.labels" . | nindent 4 }}
+spec:
+  selfSigned: {}
+---
+{{- end }}
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ include "operator.webhookCertName" . }}
+  namespace: {{ include "operator.namespace" . }}
+  labels:
+    {{- include "operator.labels" . | nindent 4 }}
+spec:
+  secretName: {{ include "operator.webhookCertName" . }}
+  dnsNames:
+    - {{ include "operator.webhookServiceName" . }}.{{ include "operator.namespace" . }}.svc
+    - {{ include "operator.webhookServiceName" . }}.{{ include "operator.namespace" . }}.svc.cluster.local
+  duration: 8760h    # 1 year
+  renewBefore: 720h  # 30d
+  issuerRef:
+    {{- if .Values.certManager.issuerRef.name }}
+    {{- toYaml .Values.certManager.issuerRef | nindent 4 }}
+    {{- else }}
+    name: {{ include "operator.webhookIssuerName" . }}
+    kind: Issuer
+    {{- end }}
+{{- end }}

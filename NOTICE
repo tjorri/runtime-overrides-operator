@@ -1,0 +1,56 @@
+runtime-overrides-operator
+Copyright (c) 2026 tjorri
+
+This project ships two distinct artifacts with two distinct licenses:
+
+  1. The operator Go binary and source (cmd/, internal/, pkg/, api/) and
+     the container image (ghcr.io/tjorri/runtime-overrides-operator:*) are
+     licensed under the GNU Affero General Public License v3.0 only
+     (AGPL-3.0-only). See ./LICENSE for the full text.
+
+     This is because the operator imports the following AGPL-3.0 modules
+     and links them into the binary, making the combined work AGPL:
+
+       - github.com/grafana/loki/v3/pkg/validation
+       - github.com/grafana/mimir/pkg/util/validation
+
+     Both upstream projects are © Grafana Labs and contributors, licensed
+     under AGPL-3.0. Their source is available at:
+
+       - https://github.com/grafana/loki
+       - https://github.com/grafana/mimir
+
+  2. The Helm chart (deploy/charts/runtime-overrides-operator/) is licensed
+     under the Apache License 2.0. See
+     deploy/charts/runtime-overrides-operator/LICENSE for the full text.
+
+     runtime-overrides-operator Helm chart
+     Copyright (c) 2026 tjorri
+
+     Licensed under the Apache License, Version 2.0 (the "License");
+     you may not use this file except in compliance with the License.
+     You may obtain a copy of the License at
+
+       https://www.apache.org/licenses/LICENSE-2.0
+
+     The chart contains only YAML templates, default values, and a string
+     reference to the container image. It contains no AGPL code. The chart
+     and the binary together form "an aggregate" under AGPL §5; the chart
+     does not become AGPL by referencing the image.
+
+     This split follows the same model Grafana themselves use for their
+     official Helm charts:
+
+       https://github.com/grafana/helm-charts
+
+AGPL §13 (remote network interaction) compliance: anyone interacting with
+the operator over a network (e.g. via its admission webhook or metrics
+endpoint) is offered the corresponding source via:
+
+  - Container image OCI label: org.opencontainers.image.source
+  - Operator startup banner (printed to stdout on first line)
+  - Webhook HTTP response header: Source-Code
+
+The source for this project is hosted at:
+
+  https://github.com/tjorri/runtime-overrides-operator

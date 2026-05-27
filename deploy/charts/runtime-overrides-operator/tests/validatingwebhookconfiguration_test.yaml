@@ -1,0 +1,83 @@
+# SPDX-License-Identifier: Apache-2.0
+# helm-unittest tests for the ValidatingWebhookConfiguration. These pin
+# the load-bearing invariants — failurePolicy=Ignore (ADR 0001),
+# sideEffects=None, timeoutSeconds, and the "both targets disabled
+# elides the VWC entirely" gate.
+suite: validating-webhook-configuration
+templates:
+  - templates/webhook/validatingwebhookconfiguration.yaml
+release:
+  name: ro-op
+  namespace: runtime-overrides-system
+tests:
+  - it: renders one webhook per enabled target by default
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: ValidatingWebhookConfiguration
+      - lengthEqual:
+          path: webhooks
+          count: 1
+      - equal:
+          path: webhooks[0].name
+          value: vlokitenantoverride-v1alpha1.kb.io
+
+  - it: webhooks are failurePolicy=Ignore, sideEffects=None, v1, 5s timeout
+    set:
+      operator.targets.mimir.enabled: true
+    asserts:
+      - lengthEqual:
+          path: webhooks
+          count: 2
+      - equal:
+          path: webhooks[0].failurePolicy
+          value: Ignore
+      - equal:
+          path: webhooks[0].sideEffects
+          value: None
+      - equal:
+          path: webhooks[0].admissionReviewVersions[0]
+          value: v1
+      - equal:
+          path: webhooks[0].timeoutSeconds
+          value: 5
+      - equal:
+          path: webhooks[1].failurePolicy
+          value: Ignore
+      - equal:
+          path: webhooks[1].sideEffects
+          value: None
+
+  - it: cert-manager inject-ca-from annotation is present
+    asserts:
+      - matchRegex:
+          path: metadata.annotations["cert-manager.io/inject-ca-from"]
+          pattern: ".*-webhook-cert$"
+
+  - it: VWC is elided entirely when both targets are disabled
+    set:
+      operator.targets.loki.enabled: false
+      operator.targets.mimir.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: VWC is elided when webhook.enabled is false
+    set:
+      operator.webhook.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: only Mimir webhook renders when Loki is disabled
+    set:
+      operator.targets.loki.enabled: false
+      operator.targets.mimir.enabled: true
+    asserts:
+      - lengthEqual:
+          path: webhooks
+          count: 1
+      - equal:
+          path: webhooks[0].name
+          value: vmimirtenantoverride-v1alpha1.kb.io

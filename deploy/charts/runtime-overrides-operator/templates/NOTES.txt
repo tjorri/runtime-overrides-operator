@@ -1,0 +1,46 @@
+{{- $loki := .Values.operator.targets.loki -}}
+{{- $mimir := .Values.operator.targets.mimir -}}
+
+runtime-overrides-operator {{ .Chart.Version }} installed as release "{{ .Release.Name }}"
+in namespace "{{ .Release.Namespace }}".
+
+NEXT STEP — wire the operator's output ConfigMap(s) into Loki/Mimir:
+
+The operator owns and writes to these ConfigMap(s):
+{{- if $loki.enabled }}
+  • {{ $loki.outputConfigMap.namespace }}/{{ $loki.outputConfigMap.name }}   (Loki)
+{{- end }}
+{{- if $mimir.enabled }}
+  • {{ $mimir.outputConfigMap.namespace }}/{{ $mimir.outputConfigMap.name }}  (Mimir)
+{{- end }}
+
+Your Loki/Mimir installer (Helm release, Terraform module, anything) must:
+
+  1. Mount the operator's ConfigMap as a DIRECTORY (not subPath — those don't
+     auto-update; see https://github.com/kubernetes/kubernetes/issues/50345).
+
+  2. Add the mounted file path to runtime_config.file as a CSV entry — and
+     make sure the operator's file is the RIGHTMOST entry so its per-tenant
+     values override anything the installer's base file says about the same
+     tenant. Example for the Loki Helm chart:
+
+       loki:
+         structuredConfig:
+           runtime_config:
+             file: /etc/loki/runtime-base/base.yaml,/etc/loki/runtime-tenants/runtime-tenants.yaml
+
+VERIFY integration once. The Loki and Mimir images are distroless, so
+`kubectl exec` is not an option — port-forward and probe from your own
+shell instead:
+
+  # Loki
+  kubectl -n <loki-ns> port-forward deploy/<loki-deploy> 3100:3100 &
+  curl -s http://localhost:3100/runtime_config | yq '.overrides'
+
+  # Mimir (any component that reads runtime_config: distributor / ingester / ruler)
+  kubectl -n <mimir-ns> port-forward deploy/<mimir-deploy> 8080:8080 &
+  curl -s http://localhost:8080/runtime_config | yq '.overrides'
+
+The operator is healthy if its output ConfigMap exists; it will be created
+empty (`overrides: {}`) on first start. Apply a LokiTenantOverride or
+MimirTenantOverride CR in any namespace to add a tenant's overrides.

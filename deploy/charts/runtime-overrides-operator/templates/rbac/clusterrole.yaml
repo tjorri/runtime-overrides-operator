@@ -1,0 +1,35 @@
+# SPDX-License-Identifier: Apache-2.0
+# Cluster-wide read on the *TenantOverride CR kinds. Status updates use the
+# /status subresource. Events emitted on CRs in any namespace need cluster
+# scope. Output ConfigMap writes are NOT cluster-wide — see role.yaml.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "operator.fullname" . }}-manager
+  labels:
+    {{- include "operator.labels" . | nindent 4 }}
+rules:
+  - apiGroups: ["runtimeoverrides.io"]
+    resources: ["lokitenantoverrides", "mimirtenantoverrides"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["runtimeoverrides.io"]
+    resources: ["lokitenantoverrides/status", "mimirtenantoverrides/status"]
+    verbs: ["get", "update", "patch"]
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["create", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "operator.fullname" . }}-manager
+  labels:
+    {{- include "operator.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ include "operator.fullname" . }}-manager
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "operator.serviceAccountName" . }}
+    namespace: {{ include "operator.namespace" . }}

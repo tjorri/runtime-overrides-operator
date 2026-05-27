@@ -1,0 +1,72 @@
+# SPDX-License-Identifier: Apache-2.0
+name: E2E Tests
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - "docs/**"
+      - "**/*.md"
+      - "NOTICE"
+      - "LICENSE"
+      - "renovate.json"
+  pull_request:
+    paths-ignore:
+      - "docs/**"
+      - "**/*.md"
+      - "NOTICE"
+      - "LICENSE"
+      - "renovate.json"
+
+permissions:
+  contents: read
+
+# Actions pinned by commit SHA; see .github/workflows/lint.yml for the
+# rationale and the Dependabot/Renovate convention.
+jobs:
+  test-e2e:
+    name: KinD end-to-end
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Setup Go
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
+        with:
+          go-version-file: go.mod
+
+      - name: Install kind
+        run: |
+          curl -Lo ./kind https://kind.sigs.k8s.io/dl/latest/kind-linux-$(go env GOARCH)
+          chmod +x ./kind
+          sudo mv ./kind /usr/local/bin/kind
+          kind version
+
+      - name: Install helm
+        uses: azure/setup-helm@dda3372f752e03dde6b3237bc9431cdc2f7a02a2 # v5.0.0
+        with:
+          version: v3.16.4
+
+      - name: Run e2e
+        run: |
+          go mod tidy
+          make test-e2e
+
+      - name: Collect operator logs on failure
+        if: failure()
+        run: |
+          mkdir -p artifacts
+          kubectl get pods -A -o wide > artifacts/pods.txt || true
+          kubectl get events -A --sort-by='.lastTimestamp' > artifacts/events.txt || true
+          kubectl -n runtime-overrides-operator-system logs -l app.kubernetes.io/name=runtime-overrides-operator --all-containers --tail=-1 > artifacts/operator.log || true
+          kubectl -n loki logs deploy/loki --tail=-1 > artifacts/loki.log || true
+          kubectl -n mimir logs deploy/mimir --tail=-1 > artifacts/mimir.log || true
+
+      - name: Upload artifacts on failure
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: e2e-artifacts-${{ github.run_id }}
+          path: artifacts/
+          retention-days: 7

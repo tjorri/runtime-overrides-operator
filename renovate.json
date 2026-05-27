@@ -1,0 +1,75 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended",
+    ":semanticCommits",
+    "helpers:pinGitHubActionDigests"
+  ],
+  "labels": ["dependencies"],
+  "commitMessagePrefix": "chore(deps): ",
+  "packageRules": [
+    {
+      "matchManagers": ["gomod"],
+      "matchPackageNames": [
+        "github.com/grafana/loki/v3",
+        "github.com/grafana/mimir"
+      ],
+      "groupName": "grafana upstream (loki+mimir)",
+      "schedule": ["after 1am and before 7am on monday"],
+      "automerge": false,
+      "labels": ["dependencies", "upstream-validation"],
+      "commitMessageTopic": "Grafana upstream validation modules",
+      "description": "Loki and Mimir validation imports drive the operator's validation behavior. E2e suite must pass before merge."
+    },
+    {
+      "matchManagers": ["gomod"],
+      "matchUpdateTypes": ["major"],
+      "labels": ["dependencies", "major"],
+      "automerge": false
+    },
+    {
+      "matchManagers": ["gomod"],
+      "matchUpdateTypes": ["patch", "minor"],
+      "matchPackageNames": [
+        "!github.com/grafana/loki/v3",
+        "!github.com/grafana/mimir"
+      ],
+      "groupName": "go module patch+minor",
+      "schedule": ["after 1am and before 7am on monday"]
+    },
+    {
+      "matchManagers": ["github-actions"],
+      "groupName": "github actions",
+      "pinDigests": true,
+      "schedule": ["after 1am and before 7am on monday"],
+      "description": "Actions are SHA-pinned with a `# vX.Y.Z` tag comment. Renovate updates both the SHA and the comment together (helpers:pinGitHubActionDigests preset + pinDigests:true)."
+    },
+    {
+      "matchManagers": ["helmv3", "dockerfile", "ko"],
+      "groupName": "container + helm",
+      "schedule": ["after 1am and before 7am on monday"]
+    },
+    {
+      "matchManagers": ["custom.regex"],
+      "matchPackageNames": ["norwoodj/helm-docs"],
+      "groupName": "helm-docs",
+      "schedule": ["after 1am and before 7am on monday"]
+    }
+  ],
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "Bump helm-docs version pinned in .github/workflows/lint.yml.",
+      "managerFilePatterns": ["/\\.github/workflows/.*\\.ya?ml$/"],
+      "matchStrings": [
+        "version=(?<currentValue>v\\d+\\.\\d+\\.\\d+)\\s*\\n\\s*curl[^\"\\n]+norwoodj/helm-docs"
+      ],
+      "depNameTemplate": "norwoodj/helm-docs",
+      "datasourceTemplate": "github-releases"
+    }
+  ],
+  "vulnerabilityAlerts": {
+    "enabled": true,
+    "labels": ["security"]
+  }
+}

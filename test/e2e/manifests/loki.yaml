@@ -1,0 +1,137 @@
+# SPDX-License-Identifier: Apache-2.0
+# Minimal Loki single-binary for e2e. Mounts BOTH the installer's base
+# runtime config AND the operator's output ConfigMap (overrides) as
+# DIRECTORIES (not subPath — those don't auto-update; see
+# kubernetes/kubernetes#50345). The runtime_config.file CSV lists the
+# operator's file RIGHTMOST so its per-tenant overrides win on conflict.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: loki
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: loki-base
+  namespace: loki
+data:
+  loki.yaml: |
+    auth_enabled: false
+    server:
+      http_listen_port: 3100
+    common:
+      instance_addr: 127.0.0.1
+      path_prefix: /tmp/loki
+      replication_factor: 1
+      storage:
+        filesystem:
+          chunks_directory: /tmp/loki/chunks
+          rules_directory: /tmp/loki/rules
+      ring:
+        kvstore:
+          store: inmemory
+    schema_config:
+      configs:
+        - from: 2024-01-01
+          store: tsdb
+          object_store: filesystem
+          schema: v13
+          index:
+            prefix: index_
+            period: 24h
+    compactor:
+      working_directory: /tmp/loki/compactor
+    runtime_config:
+      file: /etc/loki/runtime-base/base.yaml,/etc/loki/runtime-tenants/runtime-tenants.yaml
+  base.yaml: |
+    # Installer's base runtime config — globals only, no tenant overrides.
+    # Per-tenant overrides come from the operator's ConfigMap.
+    overrides: {}
+---
+# The operator's output ConfigMap is created on first reconcile (bootstrap
+# writes overrides: {} immediately at startup); we declare an empty one here
+# so the volume mount is satisfied even if the operator hasn't run yet.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: loki-runtime-tenants
+  namespace: loki
+  labels:
+    e2e.runtimeoverrides.io/preseed: "true"
+data:
+  runtime-tenants.yaml: "overrides: {}\n"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: loki
+  namespace: loki
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: loki
+  template:
+    metadata:
+      labels:
+        app: loki
+    spec:
+      containers:
+        - name: loki
+          image: grafana/loki:3.5.5
+          args:
+            - -config.file=/etc/loki/config/loki.yaml
+            # `overrides-exporter` is co-located with `all` so the e2e
+            # suite can verify backend-loaded runtime config via the
+            # `loki_overrides{...}` Prometheus metric on /metrics. See
+            # https://grafana.com/docs/loki/latest/operations/overrides-exporter/
+            - -target=all,overrides-exporter
+          ports:
+            - containerPort: 3100
+              name: http
+          volumeMounts:
+            - name: config
+              mountPath: /etc/loki/config
+            - name: runtime-base
+              mountPath: /etc/loki/runtime-base
+            - name: runtime-tenants
+              mountPath: /etc/loki/runtime-tenants
+            - name: data
+              mountPath: /tmp/loki
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 3100
+            initialDelaySeconds: 5
+            periodSeconds: 5
+      volumes:
+        - name: config
+          configMap:
+            name: loki-base
+            items:
+              - key: loki.yaml
+                path: loki.yaml
+        - name: runtime-base
+          configMap:
+            name: loki-base
+            items:
+              - key: base.yaml
+                path: base.yaml
+        - name: runtime-tenants
+          configMap:
+            name: loki-runtime-tenants
+        - name: data
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: loki
+  namespace: loki
+spec:
+  selector:
+    app: loki
+  ports:
+    - port: 3100
+      targetPort: 3100
+      name: http

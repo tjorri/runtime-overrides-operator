@@ -1,0 +1,94 @@
+# SPDX-License-Identifier: Apache-2.0
+# helm-unittest tests for the bundled ValidatingAdmissionPolicy.
+# Install plugin: helm plugin install https://github.com/helm-unittest/helm-unittest
+# Run:           helm unittest deploy/charts/runtime-overrides-operator/
+suite: tenant-ownership-vap
+templates:
+  - templates/policy/tenant-ownership-vap.yaml
+release:
+  name: ro-op
+  namespace: runtime-overrides-system
+tests:
+  - it: skips the VAP entirely when mode=off
+    set:
+      tenantOwnership.mode: off
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: renders namespace-equals-tenant by default with no crossNs entries
+    asserts:
+      - hasDocuments:
+          count: 2
+      - isKind:
+          of: ValidatingAdmissionPolicy
+        documentIndex: 0
+      - equal:
+          path: spec.validations[0].expression
+          value: "(!has(object.spec.tenantId) || object.spec.tenantId == '' || object.spec.tenantId == request.namespace) || request.namespace in []"
+        documentIndex: 0
+
+  - it: appends crossNamespaceNamespaces to the in-list expression
+    set:
+      tenantOwnership.crossNamespaceNamespaces:
+        - platform-overrides
+        - sre-escape
+    asserts:
+      - equal:
+          path: spec.validations[0].expression
+          value: "(!has(object.spec.tenantId) || object.spec.tenantId == '' || object.spec.tenantId == request.namespace) || request.namespace in [\"platform-overrides\", \"sre-escape\"]"
+        documentIndex: 0
+
+  - it: renders template mode with {namespace} substituted into a CEL string concat
+    set:
+      tenantOwnership.mode: template
+      tenantOwnership.namespacePattern: "team-{namespace}-prod"
+    asserts:
+      - equal:
+          path: spec.validations[0].expression
+          value: "(!has(object.spec.tenantId) || object.spec.tenantId == '' || object.spec.tenantId == ('team-' + request.namespace + '-prod'))"
+        documentIndex: 0
+
+  - it: passes through customExpression verbatim when mode=custom
+    set:
+      tenantOwnership.mode: custom
+      tenantOwnership.customExpression: "object.spec.tenantId.startsWith(request.namespace)"
+    asserts:
+      - equal:
+          path: spec.validations[0].expression
+          value: "object.spec.tenantId.startsWith(request.namespace)"
+        documentIndex: 0
+
+  - it: ValidatingAdmissionPolicyBinding is also rendered with Deny action
+    asserts:
+      - hasDocuments:
+          count: 2
+      - isKind:
+          of: ValidatingAdmissionPolicyBinding
+        documentIndex: 1
+      - equal:
+          path: spec.validationActions[0]
+          value: Deny
+        documentIndex: 1
+
+  - it: VAP has failurePolicy=Fail (binding gates writes hard)
+    asserts:
+      - equal:
+          path: spec.failurePolicy
+          value: Fail
+        documentIndex: 0
+
+  - it: skips the VAP entirely when tenantOwnership.enabled=false
+    set:
+      tenantOwnership.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: mode=custom with empty customExpression fails template rendering
+    set:
+      tenantOwnership.mode: custom
+      tenantOwnership.customExpression: ""
+    asserts:
+      - failedTemplate:
+          errorMessage: "tenantOwnership.customExpression must be set when tenantOwnership.mode is \"custom\" — an empty CEL expression would reject every CR"

@@ -1,0 +1,87 @@
+# SPDX-License-Identifier: Apache-2.0
+# Output-ConfigMap RBAC.
+#
+# The scope-narrowing has two distinct rules per target Role because
+# Kubernetes RBAC honors `resourceNames` only on get/update/patch/delete.
+# list/watch/create silently ignore `resourceNames` (the apiserver accepts
+# the rule but doesn't filter by name). Splitting the verbs into two rules
+# makes the actual security model explicit:
+#
+#   - Rule 1 (no resourceNames): list/watch/create on configmaps in the
+#     target namespace. Needed for the drift watch's informer cache and
+#     the startup bootstrap. The namespace-scoped Role itself caps the
+#     blast radius.
+#   - Rule 2 (resourceNames-scoped): get/update/patch on exactly the
+#     configured output ConfigMap. delete is intentionally absent — the
+#     output CM persists as `overrides: {}` even when all CRs are removed.
+{{- if .Values.operator.targets.loki.enabled }}
+{{- $lokiCM := .Values.operator.targets.loki.outputConfigMap }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "operator.fullname" . }}-loki-cm
+  namespace: {{ $lokiCM.namespace }}
+  labels:
+    {{- include "operator.labels" $ | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["list", "watch", "create"]
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    resourceNames: [{{ $lokiCM.name | quote }}]
+    verbs: ["get", "update", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "operator.fullname" . }}-loki-cm
+  namespace: {{ $lokiCM.namespace }}
+  labels:
+    {{- include "operator.labels" $ | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "operator.fullname" . }}-loki-cm
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "operator.serviceAccountName" $ }}
+    namespace: {{ include "operator.namespace" $ }}
+{{- end }}
+
+{{- if .Values.operator.targets.mimir.enabled }}
+{{- $mimirCM := .Values.operator.targets.mimir.outputConfigMap }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "operator.fullname" . }}-mimir-cm
+  namespace: {{ $mimirCM.namespace }}
+  labels:
+    {{- include "operator.labels" $ | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["list", "watch", "create"]
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    resourceNames: [{{ $mimirCM.name | quote }}]
+    verbs: ["get", "update", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "operator.fullname" . }}-mimir-cm
+  namespace: {{ $mimirCM.namespace }}
+  labels:
+    {{- include "operator.labels" $ | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "operator.fullname" . }}-mimir-cm
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "operator.serviceAccountName" $ }}
+    namespace: {{ include "operator.namespace" $ }}
+{{- end }}

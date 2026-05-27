@@ -1,0 +1,6 @@
+# Code owners auto-assigned to PRs. Owners get review requests by default
+# and are required by branch-protection rules (when enabled).
+# Docs: https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-security/customizing-your-repository/about-code-owners
+
+# Catch-all — every change goes to @tjorri.
+*  @tjorri

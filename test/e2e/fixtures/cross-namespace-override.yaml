@@ -1,0 +1,11 @@
+# Created in a namespace NOT listed in tenantOwnership.crossNamespaceNamespaces
+# AND with a tenantId mismatching the namespace. The bundled VAP must reject.
+apiVersion: runtimeoverrides.io/v1alpha1
+kind: LokiTenantOverride
+metadata:
+  name: cross-ns-attempt
+  namespace: test-tenant-a
+spec:
+  tenantId: test-tenant-b
+  overrides:
+    ingestion_rate_mb: 99

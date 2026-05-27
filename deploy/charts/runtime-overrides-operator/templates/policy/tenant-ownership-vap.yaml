@@ -1,0 +1,68 @@
+# SPDX-License-Identifier: Apache-2.0
+# Bundled ValidatingAdmissionPolicy for tenant ownership.
+# K8s 1.30+ baseline.
+#
+# Four configurable modes via .Values.tenantOwnership.mode:
+#   namespace-equals-tenant: default. tenantId must match request.namespace
+#                            unless the request comes from a
+#                            crossNamespaceNamespaces entry.
+#   template:                tenantId must match namespacePattern with
+#                            {namespace} substituted.
+#   custom:                  arbitrary CEL expression supplied by the user.
+#   off:                     skip the VAP entirely.
+{{- if and .Values.tenantOwnership.enabled (ne .Values.tenantOwnership.mode "off") }}
+{{- $crossNs := .Values.tenantOwnership.crossNamespaceNamespaces }}
+{{- $expr := "" }}
+{{- if eq .Values.tenantOwnership.mode "namespace-equals-tenant" }}
+  {{- $nsListLit := "[" }}
+  {{- range $i, $ns := $crossNs }}
+    {{- if $i }}{{- $nsListLit = printf "%s, " $nsListLit }}{{- end }}
+    {{- $nsListLit = printf "%s%q" $nsListLit $ns }}
+  {{- end }}
+  {{- $nsListLit = printf "%s]" $nsListLit }}
+  {{- $expr = printf "(!has(object.spec.tenantId) || object.spec.tenantId == '' || object.spec.tenantId == request.namespace) || request.namespace in %s" $nsListLit }}
+{{- else if eq .Values.tenantOwnership.mode "template" }}
+  {{/* Escape literal characters in the user's namespacePattern that would
+       break the generated CEL string literal. Order matters: escape
+       backslashes first, then single quotes (CEL single-quoted strings),
+       THEN substitute the {namespace} marker with the CEL boundary
+       construct (whose unescaped single quotes are intentional). */}}
+  {{- $raw := .Values.tenantOwnership.namespacePattern }}
+  {{- $escaped := $raw | replace "\\" "\\\\" | replace "'" "\\'" }}
+  {{- $pattern := $escaped | replace "{namespace}" "' + request.namespace + '" }}
+  {{- $expr = printf "(!has(object.spec.tenantId) || object.spec.tenantId == '' || object.spec.tenantId == ('%s'))" $pattern }}
+{{- else if eq .Values.tenantOwnership.mode "custom" }}
+  {{- $expr = required "tenantOwnership.customExpression must be set when tenantOwnership.mode is \"custom\" — an empty CEL expression would reject every CR" .Values.tenantOwnership.customExpression }}
+  {{- if eq (trim $expr) "" }}
+    {{- fail "tenantOwnership.customExpression must be a non-empty CEL expression when tenantOwnership.mode is \"custom\"" }}
+  {{- end }}
+{{- end }}
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: {{ include "operator.fullname" . }}-tenant-ownership
+  labels:
+    {{- include "operator.labels" . | nindent 4 }}
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      - apiGroups:   ["runtimeoverrides.io"]
+        apiVersions: ["v1alpha1"]
+        resources:   ["lokitenantoverrides", "mimirtenantoverrides"]
+        operations:  ["CREATE", "UPDATE"]
+  validations:
+    - expression: {{ $expr | quote }}
+      messageExpression: "'tenant ownership policy denied spec.tenantId=' + (has(object.spec.tenantId) ? object.spec.tenantId : '<unset>') + ' from namespace ' + request.namespace"
+      reason: Forbidden
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: {{ include "operator.fullname" . }}-tenant-ownership
+  labels:
+    {{- include "operator.labels" . | nindent 4 }}
+spec:
+  policyName: {{ include "operator.fullname" . }}-tenant-ownership
+  validationActions: ["Deny"]
+{{- end }}

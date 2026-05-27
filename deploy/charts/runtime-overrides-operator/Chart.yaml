@@ -1,0 +1,26 @@
+# SPDX-License-Identifier: Apache-2.0
+apiVersion: v2
+name: runtime-overrides-operator
+description: |
+  Kubernetes operator that assembles per-tenant runtime config overrides
+  for Grafana Loki and Mimir from declarative LokiTenantOverride /
+  MimirTenantOverride CRDs. The chart is Apache-2.0; the operator binary
+  it deploys is AGPL-3.0. See NOTICE at the repo root for details.
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+kubeVersion: ">= 1.30.0-0"
+home: https://github.com/tjorri/runtime-overrides-operator
+sources:
+  - https://github.com/tjorri/runtime-overrides-operator
+maintainers:
+  - name: tjorri
+keywords:
+  - grafana
+  - loki
+  - mimir
+  - runtime-config
+  - multi-tenant
+annotations:
+  artifacthub.io/license: Apache-2.0
+  artifacthub.io/prerelease: "true"

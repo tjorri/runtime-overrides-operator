@@ -1,0 +1,196 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.21.0
+  name: lokitenantoverrides.runtimeoverrides.io
+spec:
+  group: runtimeoverrides.io
+  names:
+    kind: LokiTenantOverride
+    listKind: LokiTenantOverrideList
+    plural: lokitenantoverrides
+    shortNames:
+    - lto
+    singular: lokitenantoverride
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .status.effectiveTenantId
+      name: TenantID
+      type: string
+    - jsonPath: .spec.weight
+      name: Weight
+      type: integer
+    - jsonPath: .status.conditions[?(@.type=="Validated")].status
+      name: Validated
+      type: string
+    - jsonPath: .status.conditions[?(@.type=="Applied")].status
+      name: Applied
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: LokiTenantOverride is a per-tenant runtime override contribution
+          for Loki.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: spec defines the desired state of LokiTenantOverride
+            properties:
+              overrides:
+                description: |-
+                  Overrides is the freeform map deep-merged into the tenant's stanza
+                  of the merged output ConfigMap. Schema is preserve-unknown-fields;
+                  validation against Loki's upstream Limits happens in the admission
+                  webhook and in the controller.
+                type: object
+                x-kubernetes-preserve-unknown-fields: true
+              tenantId:
+                description: |-
+                  TenantId this override applies to. Defaults to metadata.namespace
+                  when empty. The bundled ValidatingAdmissionPolicy (shipped in the
+                  Helm chart) restricts cross-namespace tenantId by default.
+                maxLength: 250
+                pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
+                type: string
+              weight:
+                default: 0
+                description: |-
+                  Weight is the precedence weight on conflict. Higher wins. Same-weight
+                  collisions are broken by lexical (namespace, name). Negative values
+                  are allowed for "below baseline" platform-default profiles.
+                format: int32
+                type: integer
+            required:
+            - overrides
+            type: object
+          status:
+            description: status defines the observed state of LokiTenantOverride
+            properties:
+              conditions:
+                description: 'Conditions: see common_types.go for the type/reason
+                  vocabulary.'
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
+              contributingPeers:
+                description: |-
+                  ContributingPeers lists other LokiTenantOverride CRs that target
+                  the same tenantId.
+                items:
+                  description: |-
+                    ContributingPeer references another *TenantOverride CR that targets the
+                    same tenantId. Surfaced in status so users can see at a glance which peers
+                    contribute to the merged output for this tenant.
+                  properties:
+                    name:
+                      description: Name of the peer CR.
+                      type: string
+                    namespace:
+                      description: Namespace of the peer CR.
+                      type: string
+                    weight:
+                      description: Weight of the peer CR. Higher weight wins on conflict.
+                      format: int32
+                      type: integer
+                  required:
+                  - name
+                  - namespace
+                  - weight
+                  type: object
+                type: array
+              effectiveTenantId:
+                description: |-
+                  EffectiveTenantId is the tenantId actually used (Spec.TenantId or
+                  the defaulted-from-namespace value).
+                type: string
+              observedGeneration:
+                description: |-
+                  ObservedGeneration is the most recent metadata.generation observed
+                  by the controller.
+                format: int64
+                type: integer
+            type: object
+        required:
+        - spec
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}

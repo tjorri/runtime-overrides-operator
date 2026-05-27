@@ -1,0 +1,5 @@
+## Append samples of your project ##
+resources:
+- runtimeoverrides_v1alpha1_lokitenantoverride.yaml
+- runtimeoverrides_v1alpha1_mimirtenantoverride.yaml
+# +kubebuilder:scaffold:manifestskustomizesamples

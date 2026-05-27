@@ -1,0 +1,38 @@
+{
+  "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
+  "release-type": "go",
+  "include-component-in-tag": false,
+  "include-v-in-tag": true,
+  "bump-minor-pre-major": true,
+  "bump-patch-for-minor-pre-major": false,
+  "draft": false,
+  "prerelease": false,
+  "changelog-sections": [
+    { "type": "feat",     "section": "Features" },
+    { "type": "fix",      "section": "Bug Fixes" },
+    { "type": "perf",     "section": "Performance" },
+    { "type": "refactor", "section": "Refactors", "hidden": false },
+    { "type": "docs",     "section": "Documentation", "hidden": false },
+    { "type": "build",    "section": "Build System" },
+    { "type": "test",     "section": "Tests", "hidden": true },
+    { "type": "chore",    "section": "Other Changes", "hidden": false },
+    { "type": "ci",       "section": "CI", "hidden": true }
+  ],
+  "packages": {
+    ".": {
+      "package-name": "runtime-overrides-operator",
+      "extra-files": [
+        {
+          "type": "yaml",
+          "path": "deploy/charts/runtime-overrides-operator/Chart.yaml",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "yaml",
+          "path": "deploy/charts/runtime-overrides-operator/Chart.yaml",
+          "jsonpath": "$.appVersion"
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,117 @@
+# SPDX-License-Identifier: Apache-2.0
+# helm-unittest tests for the per-target output-CM Role + RoleBinding.
+# Pins the load-bearing scoping invariants — resourceNames-restricted
+# get/update/patch, no delete verb, namespace matches the configured CM.
+suite: rbac-output-cm
+templates:
+  - templates/rbac/output-cm.yaml
+release:
+  name: ro-op
+  namespace: runtime-overrides-system
+tests:
+  - it: renders Loki Role+RoleBinding when only Loki is enabled
+    asserts:
+      - hasDocuments:
+          count: 2
+      - isKind:
+          of: Role
+        documentIndex: 0
+      - isKind:
+          of: RoleBinding
+        documentIndex: 1
+
+  - it: Loki Role pins resourceNames to the configured output CM
+    asserts:
+      - equal:
+          path: metadata.namespace
+          value: monitoring
+        documentIndex: 0
+      - equal:
+          path: rules[1].resourceNames[0]
+          value: loki-runtime-tenants
+        documentIndex: 0
+
+  - it: Loki Role denies the `delete` verb on the output CM
+    asserts:
+      - notContains:
+          path: rules[1].verbs
+          content: delete
+        documentIndex: 0
+      - contains:
+          path: rules[1].verbs
+          content: get
+        documentIndex: 0
+      - contains:
+          path: rules[1].verbs
+          content: update
+        documentIndex: 0
+      - contains:
+          path: rules[1].verbs
+          content: patch
+        documentIndex: 0
+
+  - it: list/watch/create rule has no resourceNames (informer-cache scope)
+    asserts:
+      - notExists:
+          path: rules[0].resourceNames
+        documentIndex: 0
+      - contains:
+          path: rules[0].verbs
+          content: list
+        documentIndex: 0
+      - contains:
+          path: rules[0].verbs
+          content: watch
+        documentIndex: 0
+      - contains:
+          path: rules[0].verbs
+          content: create
+        documentIndex: 0
+
+  - it: RoleBinding references the operator ServiceAccount in the install namespace
+    asserts:
+      - equal:
+          path: subjects[0].kind
+          value: ServiceAccount
+        documentIndex: 1
+      - equal:
+          path: subjects[0].namespace
+          value: runtime-overrides-system
+        documentIndex: 1
+
+  - it: zero documents when both targets are disabled
+    set:
+      operator.targets.loki.enabled: false
+      operator.targets.mimir.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: renders both Loki and Mimir Role+RoleBinding when both enabled
+    set:
+      operator.targets.mimir.enabled: true
+    asserts:
+      - hasDocuments:
+          count: 4
+      - equal:
+          path: rules[1].resourceNames[0]
+          value: loki-runtime-tenants
+        documentIndex: 0
+      - equal:
+          path: rules[1].resourceNames[0]
+          value: mimir-runtime-tenants
+        documentIndex: 2
+
+  - it: respects an override of the output CM name + namespace
+    set:
+      operator.targets.loki.outputConfigMap.name: my-tenants
+      operator.targets.loki.outputConfigMap.namespace: my-monitoring
+    asserts:
+      - equal:
+          path: metadata.namespace
+          value: my-monitoring
+        documentIndex: 0
+      - equal:
+          path: rules[1].resourceNames[0]
+          value: my-tenants
+        documentIndex: 0

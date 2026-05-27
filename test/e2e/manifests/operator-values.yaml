@@ -1,0 +1,35 @@
+# SPDX-License-Identifier: Apache-2.0
+# Helm values for the operator install during e2e. Both Loki and Mimir
+# targets point at the ConfigMaps the test deployments in manifests/
+# pre-create — the operator's bootstrap path then takes ownership via SSA.
+image:
+  repository: example.com/runtime-overrides-operator
+  tag: e2e
+  pullPolicy: Never
+
+operator:
+  targets:
+    loki:
+      enabled: true
+      outputConfigMap:
+        namespace: loki
+        name: loki-runtime-tenants
+    mimir:
+      enabled: true
+      outputConfigMap:
+        namespace: mimir
+        name: mimir-runtime-tenants
+  webhook:
+    enabled: true
+
+tenantOwnership:
+  enabled: true
+  mode: namespace-equals-tenant
+  crossNamespaceNamespaces:
+    - platform-overrides
+
+certManager:
+  enabled: true
+
+# Single replica for faster e2e cycles.
+replicas: 1

@@ -1,0 +1,99 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "runtime-overrides-operator chart values",
+  "description": "Schema for the runtime-overrides-operator Helm chart values.",
+  "type": "object",
+  "additionalProperties": true,
+  "properties": {
+    "image": {
+      "type": "object",
+      "properties": {
+        "repository": { "type": "string", "minLength": 1 },
+        "tag":        { "type": "string" },
+        "pullPolicy": { "type": "string", "enum": ["Always", "IfNotPresent", "Never"] },
+        "pullSecrets": { "type": "array" }
+      },
+      "additionalProperties": false
+    },
+    "operator": {
+      "type": "object",
+      "properties": {
+        "targets": {
+          "type": "object",
+          "properties": {
+            "loki":  { "$ref": "#/$defs/target" },
+            "mimir": { "$ref": "#/$defs/target" }
+          },
+          "additionalProperties": false
+        },
+        "webhook": {
+          "type": "object",
+          "properties": { "enabled": { "type": "boolean" } }
+        }
+      },
+      "additionalProperties": false
+    },
+    "tenantOwnership": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "mode": {
+          "type": "string",
+          "enum": ["namespace-equals-tenant", "template", "custom", "off"]
+        },
+        "namespacePattern": {
+          "type": "string",
+          "description": "Used only when mode=template. Must NOT contain raw single quotes; use template syntax with {namespace} as the only substitution marker. The chart escapes backslashes and single quotes before substitution, but a literal `'` in the pattern is rejected here for clarity.",
+          "not": { "pattern": "'" }
+        },
+        "customExpression": {
+          "type": "string",
+          "description": "Used only when mode=custom. Raw CEL expression evaluated against the AdmissionRequest. The chart does NOT escape this value — it is your responsibility to write valid CEL."
+        },
+        "crossNamespaceNamespaces": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$" }
+        }
+      },
+      "additionalProperties": false
+    },
+    "certManager": {
+      "type": "object",
+      "properties": {
+        "enabled":   { "type": "boolean" },
+        "issuerRef": { "type": "object" }
+      }
+    },
+    "replicas":         { "type": "integer", "minimum": 1 },
+    "resources":        { "type": "object" },
+    "metrics":          { "type": "object" },
+    "prometheusRules":  { "type": "object" },
+    "commonLabels":     { "type": "object" },
+    "podAnnotations":   { "type": "object" },
+    "podLabels":        { "type": "object" },
+    "nodeSelector":     { "type": "object" },
+    "tolerations":      { "type": "array" },
+    "affinity":         { "type": "object" },
+    "nameOverride":     { "type": "string" },
+    "fullnameOverride": { "type": "string" }
+  },
+  "$defs": {
+    "target": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "outputConfigMap": {
+          "type": "object",
+          "properties": {
+            "namespace": { "type": "string", "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$" },
+            "name":      { "type": "string", "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$" }
+          },
+          "required": ["namespace", "name"],
+          "additionalProperties": false
+        }
+      },
+      "required": ["enabled", "outputConfigMap"],
+      "additionalProperties": false
+    }
+  }
+}

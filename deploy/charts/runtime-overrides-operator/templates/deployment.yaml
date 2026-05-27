@@ -1,0 +1,108 @@
+# SPDX-License-Identifier: Apache-2.0
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "operator.fullname" . }}
+  namespace: {{ include "operator.namespace" . }}
+  labels:
+    {{- include "operator.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicas }}
+  selector:
+    matchLabels:
+      {{- include "operator.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "operator.selectorLabels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      annotations:
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      serviceAccountName: {{ include "operator.serviceAccountName" . }}
+      {{- with .Values.image.pullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: manager
+          image: {{ include "operator.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args:
+            - --leader-elect
+            - --metrics-bind-address=:8443
+            - --health-probe-bind-address=:8081
+            - --loki-enabled={{ .Values.operator.targets.loki.enabled }}
+            - --loki-output-cm-name={{ .Values.operator.targets.loki.outputConfigMap.name }}
+            - --loki-output-cm-namespace={{ .Values.operator.targets.loki.outputConfigMap.namespace }}
+            - --mimir-enabled={{ .Values.operator.targets.mimir.enabled }}
+            - --mimir-output-cm-name={{ .Values.operator.targets.mimir.outputConfigMap.name }}
+            - --mimir-output-cm-namespace={{ .Values.operator.targets.mimir.outputConfigMap.namespace }}
+            {{- if .Values.operator.webhook.enabled }}
+            - --enable-webhook
+            - --webhook-cert-path=/tmp/k8s-webhook-server/serving-certs
+            {{- end }}
+          ports:
+            - containerPort: 8443
+              name: metrics
+              protocol: TCP
+            - containerPort: 8081
+              name: probes
+              protocol: TCP
+            {{- if .Values.operator.webhook.enabled }}
+            - containerPort: 9443
+              name: webhook
+              protocol: TCP
+            {{- end }}
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: probes
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: probes
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            readOnlyRootFilesystem: true
+          {{- if .Values.operator.webhook.enabled }}
+          volumeMounts:
+            - name: webhook-cert
+              mountPath: /tmp/k8s-webhook-server/serving-certs
+              readOnly: true
+          {{- end }}
+      {{- if .Values.operator.webhook.enabled }}
+      volumes:
+        - name: webhook-cert
+          secret:
+            secretName: {{ include "operator.webhookCertName" . }}
+            defaultMode: 420
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

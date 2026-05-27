@@ -1,0 +1,48 @@
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  name: validating-webhook-configuration
+webhooks:
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: webhook-service
+      namespace: system
+      path: /validate-runtimeoverrides-io-v1alpha1-lokitenantoverride
+  failurePolicy: Ignore
+  name: vlokitenantoverride-v1alpha1.kb.io
+  rules:
+  - apiGroups:
+    - runtimeoverrides.io
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - lokitenantoverrides
+  sideEffects: None
+  timeoutSeconds: 5
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: webhook-service
+      namespace: system
+      path: /validate-runtimeoverrides-io-v1alpha1-mimirtenantoverride
+  failurePolicy: Ignore
+  name: vmimirtenantoverride-v1alpha1.kb.io
+  rules:
+  - apiGroups:
+    - runtimeoverrides.io
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - mimirtenantoverrides
+  sideEffects: None
+  timeoutSeconds: 5

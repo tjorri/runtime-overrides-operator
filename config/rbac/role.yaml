@@ -1,0 +1,42 @@
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: manager-role
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - configmaps
+  verbs:
+  - create
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - events
+  verbs:
+  - create
+  - patch
+- apiGroups:
+  - runtimeoverrides.io
+  resources:
+  - lokitenantoverrides
+  - mimirtenantoverrides
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - runtimeoverrides.io
+  resources:
+  - lokitenantoverrides/status
+  - mimirtenantoverrides/status
+  verbs:
+  - get
+  - patch
+  - update

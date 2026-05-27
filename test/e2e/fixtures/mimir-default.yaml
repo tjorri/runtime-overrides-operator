@@ -1,0 +1,8 @@
+apiVersion: runtimeoverrides.io/v1alpha1
+kind: MimirTenantOverride
+metadata:
+  name: default
+  namespace: test-tenant-a
+spec:
+  overrides:
+    ingestion_rate: 50000

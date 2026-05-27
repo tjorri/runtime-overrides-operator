@@ -1,0 +1,9 @@
+apiVersion: runtimeoverrides.io/v1alpha1
+kind: LokiTenantOverride
+metadata:
+  name: boost
+  namespace: test-tenant-a
+spec:
+  weight: 100
+  overrides:
+    ingestion_rate_mb: 32

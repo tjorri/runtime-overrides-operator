@@ -1,0 +1,30 @@
+# SPDX-License-Identifier: Apache-2.0
+# ko build configuration. Used by the release workflow to produce a
+# multi-arch, distroless, signable OCI image without a Dockerfile.
+#
+# Base image pinned by digest for reproducibility — Renovate's `docker`
+# manager bumps the digest in PRs against the `:nonroot` tag (see
+# renovate.json's container group).
+defaultBaseImage: gcr.io/distroless/static-debian12:nonroot@sha256:d093aa3e30dbadd3efe1310db061a14da60299baff8450a17fe0ccc514a16639
+defaultPlatforms:
+  - linux/amd64
+  - linux/arm64
+builds:
+  - id: manager
+    dir: .
+    main: ./cmd
+    env:
+      - CGO_ENABLED=0
+    ldflags:
+      - -s -w
+      - -X main.version={{.Env.VERSION}}
+    flags:
+      - -trimpath
+labels:
+  # AGPL §13 belt-and-suspenders — the source URL is one of three
+  # places the operator advertises its source: this
+  # OCI label, the startup banner, and the NOTICE file.
+  org.opencontainers.image.source: https://github.com/tjorri/runtime-overrides-operator
+  org.opencontainers.image.licenses: AGPL-3.0-only
+  org.opencontainers.image.title: runtime-overrides-operator
+  org.opencontainers.image.documentation: https://github.com/tjorri/runtime-overrides-operator/blob/main/README.md

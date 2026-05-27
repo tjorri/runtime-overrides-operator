@@ -1,0 +1,54 @@
+# SPDX-License-Identifier: Apache-2.0
+# ValidatingWebhookConfiguration. failurePolicy=Ignore — see ADR 0001.
+# CA bundle injected by cert-manager via the annotation.
+#
+# Rendered only when at least one target is enabled — an empty webhooks
+# list is rejected by the apiserver, so disabling all targets must also
+# elide the VWC entirely (and the Service + Certificate it relies on).
+{{- if and .Values.operator.webhook.enabled (or .Values.operator.targets.loki.enabled .Values.operator.targets.mimir.enabled) }}
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  name: {{ include "operator.fullname" . }}-webhook
+  labels:
+    {{- include "operator.labels" . | nindent 4 }}
+  annotations:
+    cert-manager.io/inject-ca-from: {{ include "operator.namespace" . }}/{{ include "operator.webhookCertName" . }}
+webhooks:
+  {{- if .Values.operator.targets.loki.enabled }}
+  - name: vlokitenantoverride-v1alpha1.kb.io
+    failurePolicy: Ignore
+    sideEffects: None
+    admissionReviewVersions: ["v1"]
+    timeoutSeconds: 5
+    clientConfig:
+      service:
+        name: {{ include "operator.webhookServiceName" . }}
+        namespace: {{ include "operator.namespace" . }}
+        path: /validate-runtimeoverrides-io-v1alpha1-lokitenantoverride
+        port: 443
+    rules:
+      - apiGroups:   ["runtimeoverrides.io"]
+        apiVersions: ["v1alpha1"]
+        resources:   ["lokitenantoverrides"]
+        operations:  ["CREATE", "UPDATE"]
+  {{- end }}
+  {{- if .Values.operator.targets.mimir.enabled }}
+  - name: vmimirtenantoverride-v1alpha1.kb.io
+    failurePolicy: Ignore
+    sideEffects: None
+    admissionReviewVersions: ["v1"]
+    timeoutSeconds: 5
+    clientConfig:
+      service:
+        name: {{ include "operator.webhookServiceName" . }}
+        namespace: {{ include "operator.namespace" . }}
+        path: /validate-runtimeoverrides-io-v1alpha1-mimirtenantoverride
+        port: 443
+    rules:
+      - apiGroups:   ["runtimeoverrides.io"]
+        apiVersions: ["v1alpha1"]
+        resources:   ["mimirtenantoverrides"]
+        operations:  ["CREATE", "UPDATE"]
+  {{- end }}
+{{- end }}
