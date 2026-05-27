@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.2.0](https://github.com/tjorri/runtime-overrides-operator/compare/v0.1.0...v0.2.0) (2026-05-27)
+
+
+### Features
+
+* **chart:** publish separate CRD-only chart + aggregated CRDs YAML for proper upgrade lifecycle ([#14](https://github.com/tjorri/runtime-overrides-operator/issues/14)) ([564b49a](https://github.com/tjorri/runtime-overrides-operator/commit/564b49a7ebd0299ffaaf779879e3a82923b75adf))
+
+
+### Other Changes
+
+* **deps:** Update github/codeql-action action to v4 ([#13](https://github.com/tjorri/runtime-overrides-operator/issues/13)) ([cbddb8f](https://github.com/tjorri/runtime-overrides-operator/commit/cbddb8fa0652f4acb819477490051c1daa2488f0))
+* **deps:** Update Grafana upstream validation modules to b10e9a0 ([#12](https://github.com/tjorri/runtime-overrides-operator/issues/12)) ([ffe57bd](https://github.com/tjorri/runtime-overrides-operator/commit/ffe57bd8b7f23d36954b998f3926d6115538f9b5))
+
 ## 0.1.0 (2026-05-27)
 
 

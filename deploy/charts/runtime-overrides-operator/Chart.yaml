@@ -6,8 +6,8 @@ description: |
   MimirTenantOverride CRDs. The chart is Apache-2.0; the operator binary
   it deploys is AGPL-3.0. See NOTICE at the repo root for details.
 type: application
-version: 0.1.0
-appVersion: 0.1.0
+version: 0.2.0
+appVersion: 0.2.0
 kubeVersion: '>= 1.30.0-0'
 home: https://github.com/tjorri/runtime-overrides-operator
 sources:
