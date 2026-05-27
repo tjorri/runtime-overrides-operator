@@ -307,7 +307,7 @@ require (
 
 replace github.com/prometheus/prometheus => github.com/grafana/mimir-prometheus v1.8.2-0.20260526092253-9bfb229f720a
 
-replace github.com/hashicorp/memberlist => github.com/grafana/memberlist v0.3.1-0.20251126142931-6f9f62ab6f86
+replace github.com/hashicorp/memberlist => github.com/grafana/memberlist v0.3.1-0.20260515134459-1798cf41aca7
 
 replace go.yaml.in/yaml/v3 => github.com/grafana/go-yaml/v3 v3.0.0-20260130164322-e3c24e8f4c87
 
