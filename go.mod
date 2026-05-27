@@ -4,7 +4,7 @@ go 1.26.3
 
 require (
 	github.com/grafana/loki/v3 v3.7.2
-	github.com/grafana/mimir v1.3.1-0.20260526183949-6eb40f2af1ea
+	github.com/grafana/mimir v1.10.0
 	github.com/onsi/ginkgo/v2 v2.29.0
 	github.com/onsi/gomega v1.41.0
 	github.com/prometheus/client_golang v1.23.3-0.20260305100053-48a6770e980b
