@@ -1,0 +1,90 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# Auto-regenerate the helm-docs chart READMEs on release-please PRs.
+#
+# When release-please opens a release PR it bumps the version + appVersion
+# in both Chart.yaml files (operator chart and CRD-only chart, in lockstep
+# per release-please-config.json) but does not run helm-docs. The chart
+# READMEs reference the chart version via `{{ template "chart.badgesSection" . }}`
+# and via `{{ .Version }}` in the install snippet, so the next
+# `make chart-docs-check` in the Lint workflow sees a diff and fails.
+# Without this workflow, the release PR can't merge until a human runs
+# helm-docs locally and pushes the result.
+#
+# This workflow fires on every pull_request event whose head branch
+# starts with `release-please--`, regenerates the READMEs, and pushes
+# back to the PR branch via RELEASE_PLEASE_PAT — the same token
+# release-please-action itself uses, so the resulting push re-triggers
+# the Lint workflow (which now passes).
+#
+# Loop protection: the second run of this workflow (on its own push-back)
+# finds no diff and exits early.
+name: Release-please chart-docs fixup
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+# Actions pinned by commit SHA; see .github/workflows/lint.yml for the
+# rationale and the Dependabot/Renovate convention.
+jobs:
+  regenerate:
+    name: Regenerate chart READMEs
+    runs-on: ubuntu-latest
+    if: startsWith(github.head_ref, 'release-please--')
+    permissions:
+      contents: write  # push the regenerated READMEs back to the PR branch
+    steps:
+      - name: Checkout PR branch
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          # Check out the PR branch tip (not the merge commit) so we can
+          # push the regeneration back to it. Use the same PAT release-
+          # please-action uses so the push triggers downstream CI.
+          ref: ${{ github.head_ref }}
+          token: ${{ secrets.RELEASE_PLEASE_PAT }}
+
+      - name: Install helm-docs
+        run: |
+          set -euo pipefail
+          version=v1.14.2
+          curl -sSfL "https://github.com/norwoodj/helm-docs/releases/download/${version}/helm-docs_${version#v}_Linux_x86_64.tar.gz" \
+            | tar -xz -C /tmp helm-docs
+          sudo mv /tmp/helm-docs /usr/local/bin/helm-docs
+          helm-docs --version
+
+      - name: Regenerate chart docs
+        run: make chart-docs
+
+      - name: Commit and push if READMEs changed
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+        run: |
+          set -euo pipefail
+          # Only the two chart READMEs should change. Anything else
+          # changing here would mean make chart-docs is also touching
+          # files it shouldn't — bail loudly rather than swallow it.
+          if ! git diff --quiet -- \
+              ':!deploy/charts/runtime-overrides-operator/README.md' \
+              ':!deploy/charts/runtime-overrides-operator-crds/README.md' ; then
+            echo "::error::make chart-docs modified files other than the two chart READMEs:"
+            git status --short
+            exit 1
+          fi
+
+          if git diff --quiet \
+              deploy/charts/runtime-overrides-operator/README.md \
+              deploy/charts/runtime-overrides-operator-crds/README.md ; then
+            echo "Chart READMEs already up to date; nothing to commit."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add deploy/charts/runtime-overrides-operator/README.md \
+                  deploy/charts/runtime-overrides-operator-crds/README.md
+          git commit -m "docs(chart): regenerate READMEs after ${HEAD_REF} version bump"
+          git push
