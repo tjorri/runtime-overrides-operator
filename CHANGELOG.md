@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.1](https://github.com/tjorri/runtime-overrides-operator/compare/v0.2.0...v0.2.1) (2026-05-27)
+
+
+### Bug Fixes
+
+* **chart:** add helm.sh/resource-policy=keep to CRDs to prevent cascade-delete on chart upgrade ([#17](https://github.com/tjorri/runtime-overrides-operator/issues/17)) ([64cb5d5](https://github.com/tjorri/runtime-overrides-operator/commit/64cb5d52e25a68d97c4fcde93f30c192d9a577c1))
+
 ## [0.2.0](https://github.com/tjorri/runtime-overrides-operator/compare/v0.1.0...v0.2.0) (2026-05-27)
 
 
