@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.2](https://github.com/tjorri/runtime-overrides-operator/compare/v0.2.1...v0.2.2) (2026-05-28)
+
+
+### Bug Fixes
+
+* **release:** also tag the operator image with the bare-semver chart_version ([#19](https://github.com/tjorri/runtime-overrides-operator/issues/19)) ([06d34a6](https://github.com/tjorri/runtime-overrides-operator/commit/06d34a66851e9c52a592f51cdcd878a307bd53df))
+
 ## [0.2.1](https://github.com/tjorri/runtime-overrides-operator/compare/v0.2.0...v0.2.1) (2026-05-27)
 
 

@@ -8,8 +8,8 @@ description: |
 
   Apache-2.0 licensed.
 type: application
-version: 0.2.1
-appVersion: 0.2.1
+version: 0.2.2
+appVersion: 0.2.2
 kubeVersion: '>= 1.30.0-0'
 home: https://github.com/tjorri/runtime-overrides-operator
 sources:
