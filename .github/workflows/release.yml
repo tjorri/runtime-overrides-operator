@@ -162,6 +162,7 @@ jobs:
         env:
           KO_DOCKER_REPO: ${{ env.IMAGE_REPO }}
           VERSION:        ${{ steps.version.outputs.version }}
+          CHART_VERSION:  ${{ steps.version.outputs.chart_version }}
         run: |
           set -euo pipefail
           # Reproducibility: pin embedded build timestamps to the tagged
@@ -170,10 +171,22 @@ jobs:
           SOURCE_DATE_EPOCH=$(git log -1 --pretty=%ct "${VERSION}")
           export SOURCE_DATE_EPOCH
           echo "SOURCE_DATE_EPOCH=${SOURCE_DATE_EPOCH}"
-          # Two image refs: the immutable version tag and a moving 'latest'.
+          # Three image refs:
+          #   * `${VERSION}` (e.g. v0.2.2) — matches the git tag convention.
+          #   * `${CHART_VERSION}` (e.g. 0.2.2) — bare semver, matches what
+          #     the chart's _helpers.tpl pulls (`default .Chart.AppVersion`)
+          #     since Helm's appVersion convention is no `v` prefix. Without
+          #     this tag, `helm install` resolves the chart's image as
+          #     `:0.2.2` and ImagePullBackOff's because only `:v0.2.2` is
+          #     published — that was the bug present in v0.1.0 through
+          #     v0.2.1.
+          #   * `latest` — moving tag for users who want it.
+          # All three point at the same digest; cosign signs the digest, so
+          # the additional tags don't require additional signing.
           # ko --bare emits the resolved digest reference to stdout for cosign.
           image=$(ko build --bare \
             --tags "${VERSION}" \
+            --tags "${CHART_VERSION}" \
             --tags "latest" \
             --platform=linux/amd64,linux/arm64 \
             ./cmd)
