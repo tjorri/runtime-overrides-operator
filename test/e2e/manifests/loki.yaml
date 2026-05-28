@@ -43,6 +43,13 @@ data:
       working_directory: /tmp/loki/compactor
     runtime_config:
       file: /etc/loki/runtime-base/base.yaml,/etc/loki/runtime-tenants/runtime-tenants.yaml
+      # E2E-ONLY: dskit's default poll period is 10s, which adds up to
+      # 10s of dead time per propagation-bound test. Tightening to 1s
+      # compresses the worst-case operator → CM → kubelet → dskit chain
+      # closer to the kubelet sync floor (~2-5s). Do NOT replicate this
+      # in production — frequent re-reads of the file have meaningful
+      # I/O cost at scale.
+      period: 1s
   base.yaml: |
     # Installer's base runtime config — globals only, no tenant overrides.
     # Per-tenant overrides come from the operator's ConfigMap.
