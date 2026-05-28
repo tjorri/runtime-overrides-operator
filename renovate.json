@@ -92,6 +92,16 @@
       ],
       "depNameTemplate": "norwoodj/helm-docs",
       "datasourceTemplate": "github-releases"
+    },
+    {
+      "customType": "regex",
+      "description": "Bump KIND_VERSION pinned in .github/workflows/test-e2e.yml.",
+      "managerFilePatterns": ["/\\.github/workflows/.*\\.ya?ml$/"],
+      "matchStrings": [
+        "KIND_VERSION:\\s*(?<currentValue>v\\d+\\.\\d+\\.\\d+)"
+      ],
+      "depNameTemplate": "kubernetes-sigs/kind",
+      "datasourceTemplate": "github-releases"
     }
   ],
   "vulnerabilityAlerts": {

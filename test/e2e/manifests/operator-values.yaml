@@ -2,10 +2,15 @@
 # Helm values for the operator install during e2e. Both Loki and Mimir
 # targets point at the ConfigMaps the test deployments in manifests/
 # pre-create — the operator's bootstrap path then takes ownership via SSA.
+#
+# image.repository points at the local OCI registry sidecar
+# (kind-registry, mirrored to localhost:5001 by test/e2e/kind-config.yaml).
+# The cluster pulls the operator image from there rather than relying on
+# `kind load docker-image`'s tar-stream — see Makefile's e2e-image target.
 image:
-  repository: example.com/runtime-overrides-operator
+  repository: localhost:5001/runtime-overrides-operator
   tag: e2e
-  pullPolicy: Never
+  pullPolicy: IfNotPresent
 
 operator:
   targets:

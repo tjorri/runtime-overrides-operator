@@ -50,6 +50,13 @@ data:
           store: inmemory
     runtime_config:
       file: /etc/mimir/runtime-base/base.yaml,/etc/mimir/runtime-tenants/runtime-tenants.yaml
+      # E2E-ONLY: dskit's default poll period is 10s, which adds up to
+      # 10s of dead time per propagation-bound test. Tightening to 1s
+      # compresses the worst-case operator → CM → kubelet → dskit chain
+      # closer to the kubelet sync floor (~2-5s). Do NOT replicate this
+      # in production — frequent re-reads of the file have meaningful
+      # I/O cost at scale.
+      period: 1s
   base.yaml: |
     overrides: {}
 ---

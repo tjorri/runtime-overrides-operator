@@ -4,16 +4,30 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Copyright (c) 2026 tjorri
 
+// The e2e suite is structured as independent Describe blocks rather than
+// the previous Ordered narrative. Each propagation-bound scenario gets
+// its own ephemeral tenant namespace (createTenantNS), applies its own
+// CR(s) inline, verifies, and lets DeferCleanup tear the namespace
+// down. With Ginkgo's --procs=N flag this lets the slow propagation-
+// bound specs (which each wait up to ~10s for the operator → CM →
+// kubelet → dskit chain) overlap rather than serialize.
+//
+// The only specs that cannot run in parallel are the ones that
+// manipulate the operator's output ConfigMap directly (drift watch,
+// CM-deletion recovery). Those are grouped under a Serial Describe so
+// Ginkgo runs them in a single process while other processes drain
+// parallel-safe specs.
 package e2e
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net"
 	"net/http"
 	"os/exec"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -24,21 +38,108 @@ import (
 )
 
 const (
-	testTenantNs = "test-tenant-a"
-	// propagationWait is the upper bound on end-to-end propagation:
-	// operator writes the output ConfigMap → kubelet ConfigMap sync (up
-	// to ~60s on Kubernetes default) → dskit runtime_config poll (every
-	// 10s). On a quiet cluster this stacks to ~70-90s; under GitHub-
-	// hosted-runner load we've seen it stretch closer to that ceiling.
-	// 180s gives 2× headroom over the p99 we measured locally.
+	// propagationWait caps the operator → CM → kubelet → dskit chain.
+	// With dskit's runtime_config.period tightened to 1s in the e2e
+	// Loki/Mimir manifests, typical propagation is 5-10s; 180s gives
+	// huge headroom for unusually slow CI runs.
 	propagationWait = 180 * time.Second
 	pollInterval    = 2 * time.Second
 )
 
+// lokiCM and mimirCM are the operator's output ConfigMap coordinates
+// per the e2e Helm values.
+var (
+	lokiCM  = struct{ ns, name string }{"loki", "loki-runtime-tenants"}
+	mimirCM = struct{ ns, name string }{"mimir", "mimir-runtime-tenants"}
+)
+
+// ---- per-spec tenant + CR helpers -----------------------------------------
+
+// randSuffix returns a short hex suffix for unique resource names.
+// Crypto/rand keeps two parallel specs colliding-namespace-free across
+// procs without a shared seed.
+func randSuffix() string {
+	b := make([]byte, 4)
+	_, _ = rand.Read(b)
+	return hex.EncodeToString(b)
+}
+
+// createTenantNS creates a uniquely-named namespace for one parallel
+// spec, registers DeferCleanup to delete it after the spec, and returns
+// the namespace name. Cleanup is non-blocking (`--wait=false`) — the
+// operator's reconciler drops the tenant's stanza from the output CM
+// as soon as the CRs become unwatchable, which is what later specs
+// care about; the namespace's full cascade can complete in the
+// background.
+func createTenantNS(prefix string) string {
+	ns := fmt.Sprintf("e2e-%s-%s", prefix, randSuffix())
+	nsYAML := fmt.Sprintf("apiVersion: v1\nkind: Namespace\nmetadata:\n  name: %s\n", ns)
+	cmd := exec.Command("kubectl", "apply", "-f", "-")
+	cmd.Stdin = strings.NewReader(nsYAML)
+	_, err := utils.Run(cmd)
+	Expect(err).NotTo(HaveOccurred(), "create tenant namespace %s", ns)
+	DeferCleanup(func() {
+		_, _ = utils.Run(exec.Command("kubectl", "delete", "ns", ns,
+			"--ignore-not-found", "--wait=false"))
+	})
+	return ns
+}
+
+// applyCR applies an inline-built CR YAML to the cluster. Returns the
+// `kubectl apply` stdout so callers can inspect rejection messages from
+// the webhook or VAP (for the deliberately-invalid CR scenarios).
+func applyCR(yamlBody string) (string, error) {
+	cmd := exec.Command("kubectl", "apply", "-f", "-")
+	cmd.Stdin = strings.NewReader(yamlBody)
+	out, err := utils.Run(cmd)
+	return string(out), err
+}
+
+// applyCRBypass is applyCR with `--validate=false` so kubectl's
+// client-side OpenAPI checks are skipped. Used to prove that the
+// admission webhook still fires server-side.
+func applyCRBypass(yamlBody string) (string, error) {
+	cmd := exec.Command("kubectl", "apply", "-f", "-", "--validate=false")
+	cmd.Stdin = strings.NewReader(yamlBody)
+	out, err := utils.Run(cmd)
+	return string(out), err
+}
+
+// lokiOverrideCR returns the YAML for a LokiTenantOverride with the
+// given weight + ingestion_rate_mb. Each parallel spec calls this with
+// its own ns and a self-explanatory name.
+func lokiOverrideCR(ns, name string, weight int, ingestionRateMB int) string {
+	return fmt.Sprintf(`apiVersion: runtimeoverrides.io/v1alpha1
+kind: LokiTenantOverride
+metadata:
+  name: %s
+  namespace: %s
+spec:
+  weight: %d
+  overrides:
+    ingestion_rate_mb: %d
+`, name, ns, weight, ingestionRateMB)
+}
+
+// mimirOverrideCR returns the YAML for a MimirTenantOverride with the
+// given ingestion_rate value.
+func mimirOverrideCR(ns, name string, ingestionRate int) string {
+	return fmt.Sprintf(`apiVersion: runtimeoverrides.io/v1alpha1
+kind: MimirTenantOverride
+metadata:
+  name: %s
+  namespace: %s
+spec:
+  overrides:
+    ingestion_rate: %d
+`, name, ns, ingestionRate)
+}
+
+// ---- backend probes -------------------------------------------------------
+
 // readMergedOverrides reads the operator's output ConfigMap directly
-// via kubectl and returns the YAML body the operator wrote. This is the
-// fast operator-side check — proves the operator did its job, but says
-// nothing about whether Loki/Mimir reloaded the file.
+// via kubectl. Fast operator-side check that proves the operator did
+// its job, isolating a backend-side failure from an operator-side one.
 func readMergedOverrides(namespace, cmName string) (string, error) {
 	cmd := exec.Command("kubectl", "-n", namespace, "get", "cm", cmName,
 		"-o", "jsonpath={.data.runtime-tenants\\.yaml}")
@@ -46,53 +147,24 @@ func readMergedOverrides(namespace, cmName string) (string, error) {
 	return string(out), err
 }
 
-// queryLokiOverride scrapes Loki's /metrics for the value of a specific
-// limit override for a tenant, as observed by the overrides-exporter
-// module (Loki must be running with `-target=...,overrides-exporter`
-// and `runtime_config.file` configured). Returns "" if no override is
-// loaded for that tenant/field combination — which is dskit's behaviour
-// when the runtime file is empty for that tenant.
-func queryLokiOverride(tenant, field string) (string, error) {
-	cmd := exec.Command("kubectl", "-n", "loki", "exec", "deploy/loki", "--",
-		"wget", "-qO-", "http://localhost:3100/metrics")
-	out, err := utils.Run(cmd)
-	if err != nil {
-		return "", err
-	}
-	for _, line := range strings.Split(string(out), "\n") {
-		if !strings.HasPrefix(line, "loki_overrides{") {
-			continue
-		}
-		if !strings.Contains(line, fmt.Sprintf(`limit_name="%s"`, field)) {
-			continue
-		}
-		if !strings.Contains(line, fmt.Sprintf(`user="%s"`, tenant)) {
-			continue
-		}
-		// Format is `metric{labels} value [timestamp]`; the value is the
-		// last whitespace-separated field before any optional timestamp.
-		fields := strings.Fields(line)
-		if len(fields) < 2 {
-			continue
-		}
-		return fields[len(fields)-1], nil
-	}
-	return "", nil
-}
-
-// queryMimirRuntimeConfig fetches Mimir's /runtime_config endpoint and
-// returns the loaded runtime-config YAML. Unlike Loki, Mimir exposes the
-// merged runtime config over HTTP natively. Mimir's container image is
-// distroless (no shell/wget/curl) so we can't kubectl exec into it —
-// instead we pop a one-shot port-forward via `kubectl port-forward` to
-// a free local port and HTTP from the test process.
-func queryMimirRuntimeConfig() (string, error) {
+// fetchViaPortForward starts a one-shot `kubectl port-forward` to a
+// free local port, fetches the given HTTP path, and tears the
+// forwarder down. Used for both Loki and Mimir scrapes — each call
+// runs its own forwarder so parallel specs don't contend on a shared
+// channel (unlike the previous `kubectl exec deploy/loki -- wget ...`
+// path which serialized through the apiserver's exec subprotocol).
+//
+// Defers process Kill() + Wait() so the kubectl process exits before
+// the function returns; the local port is then free for the next
+// caller. Each parallel spec gets its own ephemeral port via
+// freeLocalPort.
+func fetchViaPortForward(ns, deploy string, targetPort int, path string) (string, error) {
 	port, err := freeLocalPort()
 	if err != nil {
 		return "", fmt.Errorf("allocate local port: %w", err)
 	}
-	pf := exec.Command("kubectl", "-n", "mimir", "port-forward",
-		"deploy/mimir", fmt.Sprintf("%d:8080", port))
+	pf := exec.Command("kubectl", "-n", ns, "port-forward",
+		"deploy/"+deploy, fmt.Sprintf("%d:%d", port, targetPort))
 	if err := pf.Start(); err != nil {
 		return "", fmt.Errorf("start port-forward: %w", err)
 	}
@@ -101,8 +173,9 @@ func queryMimirRuntimeConfig() (string, error) {
 		_ = pf.Wait()
 	}()
 
-	// Wait for the local port to start accepting connections (port-forward
-	// prints "Forwarding from 127.0.0.1:<port> -> 8080" once it's ready).
+	// Wait for the local port to start accepting (kubectl port-forward
+	// prints `Forwarding from 127.0.0.1:<port> -> <target>` once it's
+	// ready; we just dial-poll instead of parsing).
 	deadline := time.Now().Add(5 * time.Second)
 	for time.Now().Before(deadline) {
 		c, derr := net.DialTimeout("tcp", fmt.Sprintf("127.0.0.1:%d", port), 200*time.Millisecond)
@@ -113,7 +186,7 @@ func queryMimirRuntimeConfig() (string, error) {
 		time.Sleep(50 * time.Millisecond)
 	}
 
-	resp, err := http.Get(fmt.Sprintf("http://127.0.0.1:%d/runtime_config", port))
+	resp, err := http.Get(fmt.Sprintf("http://127.0.0.1:%d%s", port, path))
 	if err != nil {
 		return "", err
 	}
@@ -122,9 +195,48 @@ func queryMimirRuntimeConfig() (string, error) {
 	return string(body), err
 }
 
-// freeLocalPort asks the OS for an ephemeral port and immediately closes
-// the listener — the port number is then ours to claim moments later for
-// kubectl port-forward. Racy in principle, fine in practice for tests.
+// queryLokiOverride scrapes Loki's /metrics for the value of a specific
+// limit override for a tenant, as observed by the overrides-exporter
+// module. Returns "" if no override is loaded for that tenant/field.
+//
+// Uses port-forward + HTTP rather than `kubectl exec wget` for two
+// reasons: (1) Loki's official image is distroless from v3.x onward
+// (no wget/sh, the exec would fail on a fresh upstream bump), and
+// (2) the apiserver's exec subprotocol serializes calls to the same
+// pod, so multiple parallel specs hitting the Loki pod via exec
+// would queue up; port-forward + HTTP runs each scrape on its own
+// independent channel and unlocks real parallel-spec speedup.
+func queryLokiOverride(tenant, field string) (string, error) {
+	body, err := fetchViaPortForward("loki", "loki", 3100, "/metrics")
+	if err != nil {
+		return "", err
+	}
+	for _, line := range strings.Split(body, "\n") {
+		if !strings.HasPrefix(line, "loki_overrides{") {
+			continue
+		}
+		if !strings.Contains(line, fmt.Sprintf(`limit_name="%s"`, field)) {
+			continue
+		}
+		if !strings.Contains(line, fmt.Sprintf(`user="%s"`, tenant)) {
+			continue
+		}
+		fields := strings.Fields(line)
+		if len(fields) < 2 {
+			continue
+		}
+		return fields[len(fields)-1], nil
+	}
+	return "", nil
+}
+
+// queryMimirRuntimeConfig fetches Mimir's /runtime_config endpoint.
+// Mimir's image is distroless so this path was already required; now
+// shared with Loki via fetchViaPortForward.
+func queryMimirRuntimeConfig() (string, error) {
+	return fetchViaPortForward("mimir", "mimir", 8080, "/runtime_config")
+}
+
 func freeLocalPort() (int, error) {
 	l, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -134,39 +246,8 @@ func freeLocalPort() (int, error) {
 	return port, l.Close()
 }
 
-// lokiCM and mimirCM are the operator's output ConfigMap coordinates
-// per the e2e Helm values.
-var (
-	lokiCM  = struct{ ns, name string }{"loki", "loki-runtime-tenants"}
-	mimirCM = struct{ ns, name string }{"mimir", "mimir-runtime-tenants"}
-)
+// ---- status-introspection helpers -----------------------------------------
 
-// fixturePath returns the absolute path to a test/e2e/fixtures/*.yaml.
-// utils.Run sets cmd.Dir to the repo root, so a `fixtures/foo.yaml`
-// relative path would resolve there and miss; we need the full path.
-func fixturePath(name string) string {
-	// runtime.Caller could be used too, but the manifestsDir setup in
-	// BeforeSuite already records the test dir. We resolve via that.
-	return filepath.Join(filepath.Dir(manifestsDir), "fixtures", name)
-}
-
-// applyFixture applies one of the test/e2e/fixtures/*.yaml files.
-func applyFixture(name string) (string, error) {
-	cmd := exec.Command("kubectl", "apply", "-f", fixturePath(name))
-	out, err := utils.Run(cmd)
-	return string(out), err
-}
-
-// applyFixtureBypass forces server-side apply, then sets --validate=false
-// so the API server's client-side OpenAPI checks are skipped (used for
-// "what if the webhook is bypassed" scenarios).
-func applyFixtureBypass(name string) (string, error) {
-	cmd := exec.Command("kubectl", "apply", "-f", fixturePath(name), "--validate=false")
-	out, err := utils.Run(cmd)
-	return string(out), err
-}
-
-// crStatusJSON returns the .status of a CR as a parsed map[string]any.
 func crStatusJSON(kind, namespace, name string) (map[string]any, error) {
 	cmd := exec.Command("kubectl", "-n", namespace, "get", kind, name, "-o", "jsonpath={.status}")
 	out, err := utils.Run(cmd)
@@ -184,7 +265,6 @@ func crStatusJSON(kind, namespace, name string) (map[string]any, error) {
 	return m, nil
 }
 
-// findCondition extracts a condition by Type from a status map.
 func findCondition(status map[string]any, condType string) map[string]any {
 	conds, ok := status["conditions"].([]any)
 	if !ok {
@@ -202,47 +282,41 @@ func findCondition(status map[string]any, condType string) map[string]any {
 	return nil
 }
 
-var _ = Describe("runtime-overrides-operator", Ordered, func() {
-	BeforeAll(func() {
-		// Server-side apply for idempotency — re-runs against a kept-alive
-		// cluster (E2E_SKIP_TEARDOWN from a prior pass) shouldn't fail just
-		// because the namespace exists.
-		nsYAML := fmt.Sprintf("apiVersion: v1\nkind: Namespace\nmetadata:\n  name: %s\n", testTenantNs)
-		applyCmd := exec.Command("kubectl", "apply", "-f", "-")
-		applyCmd.Stdin = strings.NewReader(nsYAML)
-		_, err := utils.Run(applyCmd)
-		Expect(err).NotTo(HaveOccurred(), "create test tenant namespace")
-	})
+// =========================================================================
+// PARALLEL-SAFE specs. Each creates its own tenant namespace.
+// =========================================================================
 
-	AfterAll(func() {
-		_, _ = utils.Run(exec.Command("kubectl", "delete", "ns", testTenantNs, "--ignore-not-found"))
-		// Leave operator+target backends around for AfterSuite to clean up.
-	})
+var _ = Describe("Loki: base CR propagates to the backend", func() {
+	It("operator writes CM, Loki reports the override via /metrics", func() {
+		ns := createTenantNS("loki-base")
 
-	It("01: Loki actually loads the base CR (overrides-exporter metric)", func() {
-		_, err := applyFixture("loki-base.yaml")
+		_, err := applyCR(lokiOverrideCR(ns, "base", 0, 8))
 		Expect(err).NotTo(HaveOccurred())
 
-		// Fast check first: the operator's output ConfigMap reflects the CR.
-		// This proves the operator did its job and isolates a backend-side
-		// failure from an operator-side failure if the next Eventually fails.
+		// Fast operator-side check first — proves the operator did its
+		// job, isolates backend-side failures.
 		Eventually(func() string {
 			body, _ := readMergedOverrides(lokiCM.ns, lokiCM.name)
 			return body
-		}, 30*time.Second, pollInterval).Should(ContainSubstring("ingestion_rate_mb: 8"))
+		}, 30*time.Second, pollInterval).Should(ContainSubstring(ns))
 
-		// Backend check: Loki's overrides-exporter scrapes the loaded
-		// runtime config every dskit poll (~10s). The metric appearing
-		// proves Loki picked up the file from the directory mount.
+		// Backend-side: Loki's overrides-exporter reports the metric.
 		Eventually(func() string {
-			v, _ := queryLokiOverride(testTenantNs, "ingestion_rate_mb")
+			v, _ := queryLokiOverride(ns, "ingestion_rate_mb")
 			return v
 		}, propagationWait, pollInterval).Should(Equal("8"))
 	})
+})
 
-	It("02: Applied condition message references CM generation + sha256 hash", func() {
+var _ = Describe("Loki: Applied condition message references CM coords + sha256", func() {
+	It("status.conditions[Applied].message contains the CM name and hash", func() {
+		ns := createTenantNS("loki-applied-msg")
+
+		_, err := applyCR(lokiOverrideCR(ns, "base", 0, 8))
+		Expect(err).NotTo(HaveOccurred())
+
 		Eventually(func() string {
-			st, err := crStatusJSON("lokitenantoverride.runtimeoverrides.io", testTenantNs, "base")
+			st, err := crStatusJSON("lokitenantoverride.runtimeoverrides.io", ns, "base")
 			if err != nil {
 				return ""
 			}
@@ -256,21 +330,35 @@ var _ = Describe("runtime-overrides-operator", Ordered, func() {
 			ContainSubstring("sha256:"),
 		))
 	})
+})
 
-	It("03: higher-weight CR overrides base on conflict (backend confirms)", func() {
-		_, err := applyFixture("loki-boost.yaml")
+var _ = Describe("Loki: higher-weight CR overrides base on conflict", func() {
+	It("base + boost in the same tenant → backend sees boost value", func() {
+		ns := createTenantNS("loki-boost")
+
+		_, err := applyCR(lokiOverrideCR(ns, "base", 0, 8))
+		Expect(err).NotTo(HaveOccurred())
+		_, err = applyCR(lokiOverrideCR(ns, "boost", 100, 32))
 		Expect(err).NotTo(HaveOccurred())
 
-		// Loki's overrides-exporter eventually reports the higher value.
 		Eventually(func() string {
-			v, _ := queryLokiOverride(testTenantNs, "ingestion_rate_mb")
+			v, _ := queryLokiOverride(ns, "ingestion_rate_mb")
 			return v
 		}, propagationWait, pollInterval).Should(Equal("32"))
 	})
+})
 
-	It("04: base CR has ContributingPeers including boost", func() {
+var _ = Describe("Loki: ContributingPeers reflects same-tenant siblings", func() {
+	It("base's status.contributingPeers lists boost", func() {
+		ns := createTenantNS("loki-peers")
+
+		_, err := applyCR(lokiOverrideCR(ns, "base", 0, 8))
+		Expect(err).NotTo(HaveOccurred())
+		_, err = applyCR(lokiOverrideCR(ns, "boost", 100, 32))
+		Expect(err).NotTo(HaveOccurred())
+
 		Eventually(func() string {
-			st, err := crStatusJSON("lokitenantoverride.runtimeoverrides.io", testTenantNs, "base")
+			st, err := crStatusJSON("lokitenantoverride.runtimeoverrides.io", ns, "base")
 			if err != nil {
 				return ""
 			}
@@ -282,125 +370,229 @@ var _ = Describe("runtime-overrides-operator", Ordered, func() {
 			return string(b)
 		}, 30*time.Second, pollInterval).Should(ContainSubstring(`"name":"boost"`))
 	})
+})
 
-	It("05: Mimir actually loads the MimirTenantOverride (/runtime_config)", func() {
-		_, err := applyFixture("mimir-default.yaml")
+var _ = Describe("Loki: deleting the high-weight CR reverts the loaded override", func() {
+	It("delete boost → backend reverts to base value", func() {
+		ns := createTenantNS("loki-revert")
+
+		_, err := applyCR(lokiOverrideCR(ns, "base", 0, 8))
+		Expect(err).NotTo(HaveOccurred())
+		_, err = applyCR(lokiOverrideCR(ns, "boost", 100, 32))
 		Expect(err).NotTo(HaveOccurred())
 
-		// Operator-side: CM has the value.
+		Eventually(func() string {
+			v, _ := queryLokiOverride(ns, "ingestion_rate_mb")
+			return v
+		}, propagationWait, pollInterval).Should(Equal("32"))
+
+		_, err = utils.Run(exec.Command("kubectl", "-n", ns, "delete",
+			"lokitenantoverride.runtimeoverrides.io", "boost"))
+		Expect(err).NotTo(HaveOccurred())
+
+		Eventually(func() string {
+			v, _ := queryLokiOverride(ns, "ingestion_rate_mb")
+			return v
+		}, propagationWait, pollInterval).Should(Equal("8"))
+	})
+})
+
+var _ = Describe("Mimir: CR propagates to the backend via /runtime_config", func() {
+	It("operator writes CM, Mimir's /runtime_config reports the override", func() {
+		ns := createTenantNS("mimir-base")
+
+		_, err := applyCR(mimirOverrideCR(ns, "default", 50000))
+		Expect(err).NotTo(HaveOccurred())
+
+		// Operator-side fast check.
 		Eventually(func() string {
 			body, _ := readMergedOverrides(mimirCM.ns, mimirCM.name)
 			return body
-		}, 30*time.Second, pollInterval).Should(ContainSubstring("ingestion_rate: 50000"))
+		}, 30*time.Second, pollInterval).Should(ContainSubstring(ns))
 
-		// Backend-side: Mimir's /runtime_config endpoint (native) reports
-		// the override after dskit's poll interval.
+		// Backend-side via /runtime_config.
 		Eventually(func() string {
 			body, _ := queryMimirRuntimeConfig()
 			return body
 		}, propagationWait, pollInterval).Should(And(
-			ContainSubstring(testTenantNs),
+			ContainSubstring(ns),
 			ContainSubstring("50000"),
 		))
 	})
+})
 
-	It("06: deleting the high-weight CR reverts Loki's loaded override", func() {
-		_, err := utils.Run(exec.Command("kubectl", "-n", testTenantNs, "delete",
-			"lokitenantoverride.runtimeoverrides.io", "boost"))
+var _ = Describe("Loki: deleting the tenant namespace drops the tenant from the backend", func() {
+	It("kubectl delete ns → backend stops reporting the tenant", func() {
+		ns := createTenantNS("loki-ns-delete")
+
+		_, err := applyCR(lokiOverrideCR(ns, "base", 0, 8))
 		Expect(err).NotTo(HaveOccurred())
 
-		// Loki's overrides-exporter eventually shows the baseline value
-		// (8) again, NOT the boost value (32).
 		Eventually(func() string {
-			v, _ := queryLokiOverride(testTenantNs, "ingestion_rate_mb")
+			v, _ := queryLokiOverride(ns, "ingestion_rate_mb")
 			return v
 		}, propagationWait, pollInterval).Should(Equal("8"))
-	})
 
-	It("07: webhook rejects a typed-mismatch CR with the upstream error", func() {
-		out, err := applyFixture("loki-invalid-typed.yaml")
+		// Explicit delete here rather than DeferCleanup so the assertion
+		// below blocks on the delete.
+		_, err = utils.Run(exec.Command("kubectl", "delete", "ns", ns, "--wait=true"))
+		Expect(err).NotTo(HaveOccurred())
+
+		// Operator-side: tenant's stanza disappears from the merged CM.
+		Eventually(func() string {
+			body, _ := readMergedOverrides(lokiCM.ns, lokiCM.name)
+			return body
+		}, 30*time.Second, pollInterval).ShouldNot(ContainSubstring(ns))
+
+		// Backend-side: Loki's overrides-exporter no longer reports the
+		// tenant in any limit metric.
+		Eventually(func() string {
+			v, _ := queryLokiOverride(ns, "ingestion_rate_mb")
+			return v
+		}, propagationWait, pollInterval).Should(BeEmpty())
+	})
+})
+
+// ---- admission + VAP: fast, transient CRs, no real propagation -------------
+
+var _ = Describe("Loki webhook: rejects a typed-mismatch CR", func() {
+	It("upstream Limits.UnmarshalYAML error propagates verbatim", func() {
+		ns := createTenantNS("loki-webhook-typed")
+		out, err := applyCR(fmt.Sprintf(`apiVersion: runtimeoverrides.io/v1alpha1
+kind: LokiTenantOverride
+metadata:
+  name: bad-type
+  namespace: %s
+spec:
+  overrides:
+    ingestion_rate_mb: "eight"
+`, ns))
 		Expect(err).To(HaveOccurred(), "expected webhook rejection")
 		Expect(out).To(ContainSubstring("loki"))
 	})
+})
 
-	It("08: webhook rejects an upstream-semantic violation (retention_stream < 24h)", func() {
-		out, err := applyFixture("loki-invalid-semantic.yaml")
+var _ = Describe("Loki webhook: rejects an upstream-semantic violation", func() {
+	It("retention_stream < 24h is rejected by upstream Limits.Validate()", func() {
+		ns := createTenantNS("loki-webhook-semantic")
+		out, err := applyCR(fmt.Sprintf(`apiVersion: runtimeoverrides.io/v1alpha1
+kind: LokiTenantOverride
+metadata:
+  name: bad-semantic
+  namespace: %s
+spec:
+  overrides:
+    retention_stream:
+      - selector: '{foo="bar"}'
+        period: 12h
+`, ns))
 		Expect(err).To(HaveOccurred(), "expected webhook rejection")
 		Expect(out).To(ContainSubstring("retention period"))
 	})
+})
 
-	It("09: --validate=false does NOT bypass the admission webhook (server-side)", func() {
-		// `kubectl --validate=false` only disables CLIENT-side OpenAPI checks.
-		// Admission webhooks fire on the API server, so the operator's
-		// webhook still rejects bad CRs even when the client validation is
-		// disabled. To exercise the "webhook unavailable + Layer 3 catches
-		// it" path, you'd scale the operator deployment to 0 first — that
-		// case is covered by the envtest in M5 rather than e2e, because
-		// envtest doesn't need the scale dance.
-		out, err := applyFixtureBypass("loki-invalid-typed.yaml")
+var _ = Describe("Loki webhook: --validate=false does not bypass server-side admission", func() {
+	It("kubectl --validate=false only skips CLIENT-side checks; webhook still fires", func() {
+		ns := createTenantNS("loki-webhook-bypass")
+		out, err := applyCRBypass(fmt.Sprintf(`apiVersion: runtimeoverrides.io/v1alpha1
+kind: LokiTenantOverride
+metadata:
+  name: bad-type
+  namespace: %s
+spec:
+  overrides:
+    ingestion_rate_mb: "eight"
+`, ns))
 		Expect(err).To(HaveOccurred(),
 			"webhook still fires server-side even with --validate=false; got out=%q", out)
 	})
+})
 
-	It("10: bundled VAP rejects a cross-namespace tenantId from an unauthorized ns", func() {
-		out, err := applyFixture("cross-namespace-override.yaml")
+var _ = Describe("VAP: cross-namespace tenantId is rejected", func() {
+	It("CR in ns A with spec.tenantId=B is rejected by the bundled VAP", func() {
+		ns := createTenantNS("vap-cross-ns")
+		out, err := applyCR(fmt.Sprintf(`apiVersion: runtimeoverrides.io/v1alpha1
+kind: LokiTenantOverride
+metadata:
+  name: cross-ns-attempt
+  namespace: %s
+spec:
+  tenantId: some-other-tenant
+  overrides:
+    ingestion_rate_mb: 99
+`, ns))
 		Expect(err).To(HaveOccurred(), "expected VAP rejection")
 		Expect(out).To(Or(
 			ContainSubstring("tenant ownership policy"),
 			ContainSubstring("denied"),
 		))
 	})
+})
 
-	It("11: third-party write to the output ConfigMap is reverted within seconds", func() {
-		// Clobber the live CM via kubectl patch.
-		patch := `{"data":{"runtime-tenants.yaml":"overrides:\n  test-tenant-a:\n    clobbered: true\n"}}`
-		_, err := utils.Run(exec.Command("kubectl", "-n", "loki", "patch", "configmap",
-			"loki-runtime-tenants", "--type=merge", "-p", patch))
+// =========================================================================
+// SERIAL specs — manipulate the operator's output ConfigMap directly.
+// Must not run in parallel with other specs writing to the same CM.
+// =========================================================================
+
+var _ = Describe("Operator output CM lifecycle", Serial, func() {
+	It("third-party write is reverted within seconds", func() {
+		ns := createTenantNS("drift")
+		_, err := applyCR(lokiOverrideCR(ns, "base", 0, 8))
 		Expect(err).NotTo(HaveOccurred())
 
+		// Wait for the operator to fold this tenant into the CM so we
+		// know the "expected" content before clobbering.
 		Eventually(func() string {
-			out, _ := utils.Run(exec.Command("kubectl", "-n", "loki", "get", "cm",
-				"loki-runtime-tenants", "-o", "jsonpath={.data.runtime-tenants\\.yaml}"))
-			return string(out)
+			body, _ := readMergedOverrides(lokiCM.ns, lokiCM.name)
+			return body
+		}, 30*time.Second, pollInterval).Should(ContainSubstring(ns))
+
+		// Clobber the live CM.
+		patch := `{"data":{"runtime-tenants.yaml":"overrides:\n  drift-clobbered:\n    sentinel: true\n"}}`
+		_, err = utils.Run(exec.Command("kubectl", "-n", lokiCM.ns, "patch", "configmap",
+			lokiCM.name, "--type=merge", "-p", patch))
+		Expect(err).NotTo(HaveOccurred())
+
+		// Operator reverts: our tenant stanza reappears, clobber sentinel
+		// disappears.
+		Eventually(func() string {
+			body, _ := readMergedOverrides(lokiCM.ns, lokiCM.name)
+			return body
 		}, 30*time.Second, pollInterval).Should(And(
-			Not(ContainSubstring("clobbered")),
-			ContainSubstring("ingestion_rate_mb: 8"),
+			Not(ContainSubstring("drift-clobbered")),
+			ContainSubstring(ns),
 		))
 
+		// Operator emitted the ConfigMapDrifted event.
 		Eventually(func() string {
-			out, _ := utils.Run(exec.Command("kubectl", "-n", "loki", "get", "events",
-				"--field-selector=reason=ConfigMapDrifted", "-o", "jsonpath={.items[0].message}"))
+			out, _ := utils.Run(exec.Command("kubectl", "-n", lokiCM.ns, "get", "events",
+				"--field-selector=reason=ConfigMapDrifted",
+				"-o", "jsonpath={.items[*].message}"))
 			return string(out)
 		}, 30*time.Second, pollInterval).Should(ContainSubstring("reverted"))
 	})
 
-	It("12: deleting the output ConfigMap directly causes the operator to recreate it", func() {
-		_, err := utils.Run(exec.Command("kubectl", "-n", "loki", "delete", "configmap",
-			"loki-runtime-tenants"))
+	It("deleting the output ConfigMap directly causes the operator to recreate it", func() {
+		// We need at least one CR to keep the CM populated after recreate.
+		ns := createTenantNS("cm-delete")
+		_, err := applyCR(lokiOverrideCR(ns, "base", 0, 8))
 		Expect(err).NotTo(HaveOccurred())
 
+		// Wait for first write.
 		Eventually(func() error {
-			_, gerr := utils.Run(exec.Command("kubectl", "-n", "loki", "get", "cm",
-				"loki-runtime-tenants"))
+			_, gerr := utils.Run(exec.Command("kubectl", "-n", lokiCM.ns, "get", "cm", lokiCM.name))
+			return gerr
+		}, 30*time.Second, pollInterval).Should(Succeed())
+
+		// Delete the CM directly.
+		_, err = utils.Run(exec.Command("kubectl", "-n", lokiCM.ns, "delete", "configmap", lokiCM.name))
+		Expect(err).NotTo(HaveOccurred())
+
+		// Operator recreates it.
+		Eventually(func() error {
+			_, gerr := utils.Run(exec.Command("kubectl", "-n", lokiCM.ns, "get", "cm", lokiCM.name))
 			return gerr
 		}, 30*time.Second, pollInterval).Should(Succeed())
 	})
-
-	It("13: deleting the test namespace drops the tenant from the merged output and from Loki", func() {
-		_, err := utils.Run(exec.Command("kubectl", "delete", "ns", testTenantNs, "--wait=true"))
-		Expect(err).NotTo(HaveOccurred())
-
-		// Operator-side: CM no longer mentions the tenant.
-		Eventually(func() string {
-			body, _ := readMergedOverrides(lokiCM.ns, lokiCM.name)
-			return body
-		}, 30*time.Second, pollInterval).ShouldNot(ContainSubstring(testTenantNs))
-
-		// Backend-side: Loki's overrides-exporter no longer reports the
-		// tenant in any limit metric.
-		Eventually(func() string {
-			v, _ := queryLokiOverride(testTenantNs, "ingestion_rate_mb")
-			return v
-		}, propagationWait, pollInterval).Should(BeEmpty())
-	})
 })
+
