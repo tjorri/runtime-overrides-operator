@@ -157,16 +157,32 @@ E2E_IMAGE_REPO ?= localhost:$(KIND_REGISTRY_PORT)/runtime-overrides-operator
 E2E_IMAGE_TAG ?= e2e
 
 .PHONY: e2e-registry-up
-e2e-registry-up: ## Start the local OCI registry sidecar the e2e suite pushes the operator image to.
+e2e-registry-up: ## Start the local OCI registry sidecar and put it on the kind network before cluster create.
+	@# Pre-create the `kind` Docker network so the registry can join it
+	@# BEFORE `kind create cluster` runs. Without this, containerd in the
+	@# cluster boots with a mirror config pointing at `kind-registry:5000`
+	@# but the hostname doesn't resolve (the registry is still on bridge
+	@# only), and containerd's startup hangs trying the mirror — kubelet
+	@# never goes healthy and `kind create cluster` times out at the
+	@# 4-minute mark. Joining the kind network upfront keeps the
+	@# in-network hostname resolvable from the first containerd boot.
+	@if ! docker network inspect kind >/dev/null 2>&1; then \
+	  echo "Creating Docker network 'kind'..." ; \
+	  docker network create kind >/dev/null ; \
+	fi
 	@if [ -z "$$(docker ps -q -f name=^/$(KIND_REGISTRY_NAME)$$)" ]; then \
 	  echo "Starting local registry $(KIND_REGISTRY_NAME) on 127.0.0.1:$(KIND_REGISTRY_PORT)" ; \
 	  docker run -d --restart=always \
 	    -p 127.0.0.1:$(KIND_REGISTRY_PORT):5000 \
-	    --network bridge \
+	    --network kind \
 	    --name $(KIND_REGISTRY_NAME) \
 	    registry:2 >/dev/null ; \
 	else \
 	  echo "Local registry $(KIND_REGISTRY_NAME) already running." ; \
+	  if ! docker network inspect kind --format '{{range .Containers}}{{.Name}} {{end}}' 2>/dev/null | grep -qw $(KIND_REGISTRY_NAME); then \
+	    echo "Reconnecting $(KIND_REGISTRY_NAME) to the kind network..." ; \
+	    docker network connect kind $(KIND_REGISTRY_NAME) >/dev/null 2>&1 || true ; \
+	  fi ; \
 	fi
 
 .PHONY: e2e-registry-down
@@ -189,13 +205,19 @@ setup-test-e2e: e2e-registry-up ## Set up a Kind cluster (with local-registry mi
 			echo "Creating Kind cluster '$(KIND_CLUSTER)' with local-registry containerd patch..."; \
 			$(KIND) create cluster --name $(KIND_CLUSTER) --config test/e2e/kind-config.yaml ;; \
 	esac
-	@# Attach the registry to the kind Docker network so containerd in the
-	@# cluster can reach it via the in-network hostname `kind-registry`
-	@# (the rewrite is configured in test/e2e/kind-config.yaml).
-	@if ! docker network inspect kind --format '{{range .Containers}}{{.Name}} {{end}}' 2>/dev/null | grep -qw $(KIND_REGISTRY_NAME); then \
-	  echo "Connecting $(KIND_REGISTRY_NAME) to the kind Docker network..." ; \
-	  docker network connect kind $(KIND_REGISTRY_NAME) >/dev/null 2>&1 || true ; \
-	fi
+	@# Write the per-host containerd config that maps `localhost:$(KIND_REGISTRY_PORT)`
+	@# (what `ko build` pushes to and what the chart's image.repository
+	@# references) to `http://kind-registry:5000` (the in-cluster
+	@# hostname for the registry sidecar). The hosts.toml-per-directory
+	@# layout is containerd 2.x's modern registry config — the legacy
+	@# `[plugins."io.containerd.grpc.v1.cri".registry.mirrors.*]` form is
+	@# rejected by containerd 2.x and would crash containerd at startup.
+	@echo "Writing containerd hosts.toml on each kind node..."
+	@for node in $$($(KIND) get nodes --name $(KIND_CLUSTER)); do \
+	  docker exec "$$node" mkdir -p "/etc/containerd/certs.d/localhost:$(KIND_REGISTRY_PORT)" ; \
+	  printf '[host."http://%s:5000"]\n  capabilities = ["pull", "resolve"]\n' "$(KIND_REGISTRY_NAME)" \
+	    | docker exec -i "$$node" tee "/etc/containerd/certs.d/localhost:$(KIND_REGISTRY_PORT)/hosts.toml" >/dev/null ; \
+	done
 
 .PHONY: e2e-image
 e2e-image: ko ## Build the operator image and push it to the e2e local registry (much faster than `kind load`).

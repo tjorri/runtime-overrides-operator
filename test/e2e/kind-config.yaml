@@ -1,18 +1,25 @@
 # SPDX-License-Identifier: Apache-2.0
 #
-# KinD cluster config for the e2e suite. The `containerdConfigPatches`
-# block routes image pulls for `localhost:5001` (where the host-side OCI
-# registry sidecar runs) to `kind-registry:5000` (the registry container
-# name on the kind Docker network). This lets the operator image be
-# `ko build`-pushed once to the local registry and pulled by the cluster
-# without the slow `kind load docker-image` tar-stream — typical savings
-# are ~30s per BeforeSuite.
+# KinD cluster config for the e2e suite. Enables containerd's
+# `config_path` plugin so per-host registry hosts.toml files written
+# under /etc/containerd/certs.d/<host>/ are honored. The Makefile's
+# setup-test-e2e target writes the actual hosts.toml mapping
+# `localhost:5001` → `http://kind-registry:5000` after cluster create.
+#
+# We use this config_path-based approach (not the legacy
+# `[plugins."io.containerd.grpc.v1.cri".registry.mirrors."..."]` block)
+# because the legacy mirrors block is incompatible with containerd 2.x
+# shipped in kind's v1.34+ node images — containerd refuses to start
+# with the legacy syntax in v2.x, kubelet then never goes healthy, and
+# `kind create cluster` times out at the 4-minute kubeadm-init mark.
 #
 # See https://kind.sigs.k8s.io/docs/user/local-registry/ for the
-# canonical recipe this is based on.
+# canonical recipe this is based on, and
+# https://github.com/containerd/containerd/blob/main/docs/hosts.md
+# for the per-host config format.
 apiVersion: kind.x-k8s.io/v1alpha4
 kind: Cluster
 containerdConfigPatches:
   - |-
-    [plugins."io.containerd.grpc.v1.cri".registry.mirrors."localhost:5001"]
-      endpoint = ["http://kind-registry:5000"]
+    [plugins."io.containerd.grpc.v1.cri".registry]
+      config_path = "/etc/containerd/certs.d"
