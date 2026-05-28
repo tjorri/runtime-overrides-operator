@@ -227,12 +227,21 @@ e2e-image: ko ## Build the operator image and push it to the e2e local registry 
 	    $(KO) build --bare --tags "$(E2E_IMAGE_TAG)" --platform="$$host_platform" ./cmd
 
 .PHONY: test-e2e
-# -timeout=25m overrides go test's 10m default. On local hardware the
-# suite finishes in ~5min; GitHub-hosted runners can stretch to ~12-15min
-# when test 03/05/13 each hit close to the 180s propagationWait ceiling.
-# 25m gives meaningful headroom for slow runs plus AfterSuite teardown.
-test-e2e: setup-test-e2e manifests generate fmt vet ## Run the e2e tests. Expected an isolated environment using Kind.
-	KIND=$(KIND) KIND_CLUSTER=$(KIND_CLUSTER) go test -tags=e2e ./test/e2e/ -v -timeout=25m -ginkgo.v
+# Run via the ginkgo CLI so we can use --procs=N to parallelize specs
+# across N processes (the parallel runner spawns multiple test binaries
+# and distributes specs between them). Each parallel-safe spec creates
+# its own ephemeral tenant namespace; specs marked Serial in the suite
+# run in a single process while the others drain.
+#
+# --procs=2 matches the GitHub-hosted runner's CPU count. Local hardware
+# with more cores can override (e.g. `make test-e2e GINKGO_PROCS=4`).
+#
+# --timeout=25m caps total runtime; locally the parallel suite finishes
+# in ~4-5min, but the timeout gives meaningful headroom on slow CI.
+GINKGO_PROCS ?= 2
+test-e2e: setup-test-e2e manifests generate fmt vet ginkgo ## Run the e2e tests. Expected an isolated environment using Kind.
+	KIND=$(KIND) KIND_CLUSTER=$(KIND_CLUSTER) \
+	  "$(GINKGO)" --tags=e2e -v --procs=$(GINKGO_PROCS) --timeout=25m ./test/e2e/
 	$(MAKE) cleanup-test-e2e
 
 .PHONY: cleanup-test-e2e
@@ -336,10 +345,15 @@ CONTROLLER_GEN ?= $(LOCALBIN)/controller-gen
 ENVTEST ?= $(LOCALBIN)/setup-envtest
 GOLANGCI_LINT = $(LOCALBIN)/golangci-lint
 KO ?= $(LOCALBIN)/ko
+GINKGO ?= $(LOCALBIN)/ginkgo
 
 ## Tool Versions
 KUSTOMIZE_VERSION ?= v5.8.1
 CONTROLLER_TOOLS_VERSION ?= v0.21.0
+# Keep aligned with the github.com/onsi/ginkgo/v2 version in go.mod —
+# the ginkgo CLI's parallel runner needs to match the library's
+# internal protocol version.
+GINKGO_VERSION ?= v2.29.0
 
 #ENVTEST_VERSION is the version of controller-runtime release branch to fetch the envtest setup script (i.e. release-0.20)
 ENVTEST_VERSION ?= $(shell v='$(call gomodver,sigs.k8s.io/controller-runtime)'; \
@@ -385,6 +399,11 @@ $(GOLANGCI_LINT): $(LOCALBIN)
 ko: $(KO) ## Download ko locally if necessary.
 $(KO): $(LOCALBIN)
 	$(call go-install-tool,$(KO),github.com/google/ko,$(KO_VERSION))
+
+.PHONY: ginkgo
+ginkgo: $(GINKGO) ## Download ginkgo CLI locally if necessary.
+$(GINKGO): $(LOCALBIN)
+	$(call go-install-tool,$(GINKGO),github.com/onsi/ginkgo/v2/ginkgo,$(GINKGO_VERSION))
 
 # go-install-tool will 'go install' any package with custom target and name of binary, if it doesn't exist
 # $1 - target path with name of binary

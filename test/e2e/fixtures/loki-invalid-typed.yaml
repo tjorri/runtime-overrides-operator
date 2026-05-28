@@ -1,9 +1,0 @@
-# Type mismatch — webhook rejects with upstream error verbatim.
-apiVersion: runtimeoverrides.io/v1alpha1
-kind: LokiTenantOverride
-metadata:
-  name: bad-type
-  namespace: test-tenant-a
-spec:
-  overrides:
-    ingestion_rate_mb: "eight"

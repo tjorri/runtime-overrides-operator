@@ -58,120 +58,127 @@ func TestE2E(t *testing.T) {
 	RunSpecs(t, "e2e suite")
 }
 
-var _ = BeforeSuite(func() {
-	wd, err := os.Getwd()
-	Expect(err).NotTo(HaveOccurred())
-	manifestsDir = filepath.Join(wd, "manifests")
+// One-time suite setup runs in process 1 via the first
+// SynchronizedBeforeSuite callback; every parallel process then runs
+// the second callback to initialize per-process globals (paths). With
+// `ginkgo --procs=N`, specs are distributed across N processes that
+// share the kind cluster but each have their own Go runtime.
+var _ = SynchronizedBeforeSuite(
+	func() []byte {
+		wd, err := os.Getwd()
+		Expect(err).NotTo(HaveOccurred())
+		manifestsDir = filepath.Join(wd, "manifests")
+		repoRoot, err = filepath.Abs(filepath.Join(wd, "..", ".."))
+		Expect(err).NotTo(HaveOccurred())
 
-	if !skipImageBuild {
-		By("building and pushing the manager image to the local e2e registry")
-		// `make e2e-image` builds with ko and pushes to localhost:5001
-		// (the kind-registry sidecar). Faster than the previous
-		// `docker-build` + `kind load docker-image` pair (~30s saved per
-		// run) because we avoid the tar-stream into kind's containerd.
-		_, err := utils.Run(exec.Command("make", "e2e-image"))
-		ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to build/push the manager image")
-	}
-
-	if !skipCertManagerInstall {
-		isCertManagerAlreadyInstalled = utils.IsCertManagerCRDsInstalled()
-		if !isCertManagerAlreadyInstalled {
-			_, _ = fmt.Fprintln(GinkgoWriter, "Installing cert-manager...")
-			Expect(utils.InstallCertManager()).To(Succeed(), "Failed to install cert-manager")
-		} else {
-			_, _ = fmt.Fprintln(GinkgoWriter, "cert-manager already installed; skipping")
+		if !skipImageBuild {
+			By("building and pushing the manager image to the local e2e registry")
+			_, err := utils.Run(exec.Command("make", "e2e-image"))
+			ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to build/push the manager image")
 		}
-	}
 
-	By("deploying Loki + Mimir single-binaries (parallel)")
-	// Apply both serially (cheap), then wait for both rollouts
-	// concurrently. The rollout-status wait is what consumes wall-time
-	// (each pod pulls a ~100-200MB upstream image and runs startup
-	// probes), so overlapping the two waits saves ~60s on a cold pull.
-	//
-	// utils.Run() can't be used in parallel because it calls os.Chdir()
-	// which is process-global. Use raw exec.Command for the goroutines.
-	_, err = utils.Run(exec.Command("kubectl", "apply", "-f", filepath.Join(manifestsDir, "loki.yaml")))
-	Expect(err).NotTo(HaveOccurred())
-	_, err = utils.Run(exec.Command("kubectl", "apply", "-f", filepath.Join(manifestsDir, "mimir.yaml")))
-	Expect(err).NotTo(HaveOccurred())
-
-	rolloutReady := func(ns, deploy string) <-chan error {
-		ch := make(chan error, 1)
-		go func() {
-			cmd := exec.Command("kubectl", "-n", ns, "rollout", "status",
-				"deploy/"+deploy, "--timeout=180s")
-			out, err := cmd.CombinedOutput()
-			if err != nil {
-				ch <- fmt.Errorf("rollout %s/%s: %w\n%s", ns, deploy, err, out)
-				return
+		if !skipCertManagerInstall {
+			isCertManagerAlreadyInstalled = utils.IsCertManagerCRDsInstalled()
+			if !isCertManagerAlreadyInstalled {
+				_, _ = fmt.Fprintln(GinkgoWriter, "Installing cert-manager...")
+				Expect(utils.InstallCertManager()).To(Succeed(), "Failed to install cert-manager")
+			} else {
+				_, _ = fmt.Fprintln(GinkgoWriter, "cert-manager already installed; skipping")
 			}
-			ch <- nil
-		}()
-		return ch
-	}
-	lokiReady := rolloutReady("loki", "loki")
-	mimirReady := rolloutReady("mimir", "mimir")
-	Expect(<-lokiReady).NotTo(HaveOccurred(), "Loki failed to become ready")
-	Expect(<-mimirReady).NotTo(HaveOccurred(), "Mimir failed to become ready")
+		}
 
-	By("installing the operator Helm chart")
-	// Use server-side apply for idempotency — re-runs (E2E_SKIP_TEARDOWN
-	// from a prior pass) shouldn't fail just because the namespace exists.
-	nsYAML := fmt.Sprintf("apiVersion: v1\nkind: Namespace\nmetadata:\n  name: %s\n", operatorNamespace)
-	applyCmd := exec.Command("kubectl", "apply", "-f", "-")
-	applyCmd.Stdin = strings.NewReader(nsYAML)
-	_, err = utils.Run(applyCmd)
-	Expect(err).NotTo(HaveOccurred())
+		By("deploying Loki + Mimir single-binaries (parallel)")
+		_, err = utils.Run(exec.Command("kubectl", "apply", "-f", filepath.Join(manifestsDir, "loki.yaml")))
+		Expect(err).NotTo(HaveOccurred())
+		_, err = utils.Run(exec.Command("kubectl", "apply", "-f", filepath.Join(manifestsDir, "mimir.yaml")))
+		Expect(err).NotTo(HaveOccurred())
 
-	repoRoot, err = filepath.Abs(filepath.Join(wd, "..", ".."))
-	Expect(err).NotTo(HaveOccurred())
-	chartPath := filepath.Join(repoRoot, "deploy", "charts", "runtime-overrides-operator")
-	valuesPath := filepath.Join(manifestsDir, "operator-values.yaml")
+		rolloutReady := func(ns, deploy string) <-chan error {
+			ch := make(chan error, 1)
+			go func() {
+				cmd := exec.Command("kubectl", "-n", ns, "rollout", "status",
+					"deploy/"+deploy, "--timeout=180s")
+				out, err := cmd.CombinedOutput()
+				if err != nil {
+					ch <- fmt.Errorf("rollout %s/%s: %w\n%s", ns, deploy, err, out)
+					return
+				}
+				ch <- nil
+			}()
+			return ch
+		}
+		lokiReady := rolloutReady("loki", "loki")
+		mimirReady := rolloutReady("mimir", "mimir")
+		Expect(<-lokiReady).NotTo(HaveOccurred(), "Loki failed to become ready")
+		Expect(<-mimirReady).NotTo(HaveOccurred(), "Mimir failed to become ready")
 
-	_, err = utils.Run(exec.Command("helm", "upgrade", "--install", helmReleaseName, chartPath,
-		"--namespace", operatorNamespace,
-		"--values", valuesPath,
-		"--wait", "--timeout=180s",
-	))
-	Expect(err).NotTo(HaveOccurred(), "helm install failed")
+		By("installing the operator Helm chart")
+		nsYAML := fmt.Sprintf("apiVersion: v1\nkind: Namespace\nmetadata:\n  name: %s\n", operatorNamespace)
+		applyCmd := exec.Command("kubectl", "apply", "-f", "-")
+		applyCmd.Stdin = strings.NewReader(nsYAML)
+		_, err = utils.Run(applyCmd)
+		Expect(err).NotTo(HaveOccurred())
 
-	By("waiting for the operator deployment to be ready")
-	_, err = utils.Run(exec.Command("kubectl", "-n", operatorNamespace,
-		"rollout", "status", fmt.Sprintf("deploy/%s-runtime-overrides-operator", helmReleaseName),
-		"--timeout=180s"))
-	Expect(err).NotTo(HaveOccurred(), "operator failed to become ready")
-})
+		chartPath := filepath.Join(repoRoot, "deploy", "charts", "runtime-overrides-operator")
+		valuesPath := filepath.Join(manifestsDir, "operator-values.yaml")
+		_, err = utils.Run(exec.Command("helm", "upgrade", "--install", helmReleaseName, chartPath,
+			"--namespace", operatorNamespace,
+			"--values", valuesPath,
+			"--wait", "--timeout=180s",
+		))
+		Expect(err).NotTo(HaveOccurred(), "helm install failed")
 
-var _ = AfterSuite(func() {
-	// Dump cluster diagnostics BEFORE teardown so failures stay
-	// reproducible. The previous design relied on a post-step in the
-	// GitHub Actions workflow that ran AFTER `make test-e2e` exited —
-	// by which point the operator/Loki/Mimir pods had already been
-	// deleted, leaving the artifacts empty. This now runs while the
-	// cluster is still intact, on every run; the workflow only uploads
-	// the artifacts on failure, and the artifacts/ directory is
-	// gitignored locally.
-	dumpClusterArtifacts()
+		By("waiting for the operator deployment to be ready")
+		_, err = utils.Run(exec.Command("kubectl", "-n", operatorNamespace,
+			"rollout", "status", fmt.Sprintf("deploy/%s-runtime-overrides-operator", helmReleaseName),
+			"--timeout=180s"))
+		Expect(err).NotTo(HaveOccurred(), "operator failed to become ready")
 
-	if os.Getenv("E2E_SKIP_TEARDOWN") == "true" {
-		_, _ = fmt.Fprintln(GinkgoWriter, "E2E_SKIP_TEARDOWN=true; leaving cluster state in place")
-		return
-	}
+		return nil
+	},
+	func(_ []byte) {
+		// Per-process initialization: every parallel proc needs its own
+		// copy of the path globals (helpers call into manifestsDir +
+		// repoRoot in AfterSuite's diagnostic dump).
+		wd, err := os.Getwd()
+		Expect(err).NotTo(HaveOccurred())
+		manifestsDir = filepath.Join(wd, "manifests")
+		repoRoot, err = filepath.Abs(filepath.Join(wd, "..", ".."))
+		Expect(err).NotTo(HaveOccurred())
+	},
+)
 
-	By("uninstalling the operator chart")
-	_, _ = utils.Run(exec.Command("helm", "uninstall", helmReleaseName, "-n", operatorNamespace))
-	_, _ = utils.Run(exec.Command("kubectl", "delete", "ns", operatorNamespace, "--ignore-not-found"))
+// SynchronizedAfterSuite's callbacks run in opposite order from
+// BeforeSuite's: the per-process callback runs first in every proc;
+// the once-only callback runs last, in process 1, after all procs
+// have completed their per-process teardown.
+var _ = SynchronizedAfterSuite(
+	func() {
+		// Per-process teardown — nothing today.
+	},
+	func() {
+		// Once: dump diagnostics, then helm uninstall.
+		dumpClusterArtifacts()
 
-	By("tearing down Loki + Mimir")
-	_, _ = utils.Run(exec.Command("kubectl", "delete", "-f", filepath.Join(manifestsDir, "loki.yaml"), "--ignore-not-found"))
-	_, _ = utils.Run(exec.Command("kubectl", "delete", "-f", filepath.Join(manifestsDir, "mimir.yaml"), "--ignore-not-found"))
+		if os.Getenv("E2E_SKIP_TEARDOWN") == "true" {
+			_, _ = fmt.Fprintln(GinkgoWriter, "E2E_SKIP_TEARDOWN=true; leaving cluster state in place")
+			return
+		}
 
-	if !skipCertManagerInstall && !isCertManagerAlreadyInstalled {
-		_, _ = fmt.Fprintln(GinkgoWriter, "Uninstalling cert-manager...")
-		utils.UninstallCertManager()
-	}
-})
+		By("uninstalling the operator chart")
+		_, _ = utils.Run(exec.Command("helm", "uninstall", helmReleaseName, "-n", operatorNamespace))
+		_, _ = utils.Run(exec.Command("kubectl", "delete", "ns", operatorNamespace, "--ignore-not-found"))
+
+		By("tearing down Loki + Mimir")
+		_, _ = utils.Run(exec.Command("kubectl", "delete", "-f", filepath.Join(manifestsDir, "loki.yaml"), "--ignore-not-found"))
+		_, _ = utils.Run(exec.Command("kubectl", "delete", "-f", filepath.Join(manifestsDir, "mimir.yaml"), "--ignore-not-found"))
+
+		if !skipCertManagerInstall && !isCertManagerAlreadyInstalled {
+			_, _ = fmt.Fprintln(GinkgoWriter, "Uninstalling cert-manager...")
+			utils.UninstallCertManager()
+		}
+	},
+)
 
 // dumpClusterArtifacts captures the operator, Loki, and Mimir pod logs
 // plus cluster-wide events and pod listing into <repoRoot>/artifacts/.
