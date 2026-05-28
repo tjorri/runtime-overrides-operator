@@ -147,18 +147,71 @@ func readMergedOverrides(namespace, cmName string) (string, error) {
 	return string(out), err
 }
 
-// queryLokiOverride scrapes Loki's /metrics for the value of a specific
-// limit override for a tenant, as observed by the overrides-exporter
-// module. Returns "" if no override is loaded for that tenant/field
-// combination.
-func queryLokiOverride(tenant, field string) (string, error) {
-	cmd := exec.Command("kubectl", "-n", "loki", "exec", "deploy/loki", "--",
-		"wget", "-qO-", "http://localhost:3100/metrics")
-	out, err := utils.Run(cmd)
+// fetchViaPortForward starts a one-shot `kubectl port-forward` to a
+// free local port, fetches the given HTTP path, and tears the
+// forwarder down. Used for both Loki and Mimir scrapes — each call
+// runs its own forwarder so parallel specs don't contend on a shared
+// channel (unlike the previous `kubectl exec deploy/loki -- wget ...`
+// path which serialized through the apiserver's exec subprotocol).
+//
+// Defers process Kill() + Wait() so the kubectl process exits before
+// the function returns; the local port is then free for the next
+// caller. Each parallel spec gets its own ephemeral port via
+// freeLocalPort.
+func fetchViaPortForward(ns, deploy string, targetPort int, path string) (string, error) {
+	port, err := freeLocalPort()
+	if err != nil {
+		return "", fmt.Errorf("allocate local port: %w", err)
+	}
+	pf := exec.Command("kubectl", "-n", ns, "port-forward",
+		"deploy/"+deploy, fmt.Sprintf("%d:%d", port, targetPort))
+	if err := pf.Start(); err != nil {
+		return "", fmt.Errorf("start port-forward: %w", err)
+	}
+	defer func() {
+		_ = pf.Process.Kill()
+		_ = pf.Wait()
+	}()
+
+	// Wait for the local port to start accepting (kubectl port-forward
+	// prints `Forwarding from 127.0.0.1:<port> -> <target>` once it's
+	// ready; we just dial-poll instead of parsing).
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		c, derr := net.DialTimeout("tcp", fmt.Sprintf("127.0.0.1:%d", port), 200*time.Millisecond)
+		if derr == nil {
+			_ = c.Close()
+			break
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+
+	resp, err := http.Get(fmt.Sprintf("http://127.0.0.1:%d%s", port, path))
 	if err != nil {
 		return "", err
 	}
-	for _, line := range strings.Split(string(out), "\n") {
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	return string(body), err
+}
+
+// queryLokiOverride scrapes Loki's /metrics for the value of a specific
+// limit override for a tenant, as observed by the overrides-exporter
+// module. Returns "" if no override is loaded for that tenant/field.
+//
+// Uses port-forward + HTTP rather than `kubectl exec wget` for two
+// reasons: (1) Loki's official image is distroless from v3.x onward
+// (no wget/sh, the exec would fail on a fresh upstream bump), and
+// (2) the apiserver's exec subprotocol serializes calls to the same
+// pod, so multiple parallel specs hitting the Loki pod via exec
+// would queue up; port-forward + HTTP runs each scrape on its own
+// independent channel and unlocks real parallel-spec speedup.
+func queryLokiOverride(tenant, field string) (string, error) {
+	body, err := fetchViaPortForward("loki", "loki", 3100, "/metrics")
+	if err != nil {
+		return "", err
+	}
+	for _, line := range strings.Split(body, "\n") {
 		if !strings.HasPrefix(line, "loki_overrides{") {
 			continue
 		}
@@ -177,41 +230,11 @@ func queryLokiOverride(tenant, field string) (string, error) {
 	return "", nil
 }
 
-// queryMimirRuntimeConfig fetches Mimir's /runtime_config endpoint via
-// a one-shot kubectl port-forward (Mimir's image is distroless so we
-// can't exec wget inside the pod).
+// queryMimirRuntimeConfig fetches Mimir's /runtime_config endpoint.
+// Mimir's image is distroless so this path was already required; now
+// shared with Loki via fetchViaPortForward.
 func queryMimirRuntimeConfig() (string, error) {
-	port, err := freeLocalPort()
-	if err != nil {
-		return "", fmt.Errorf("allocate local port: %w", err)
-	}
-	pf := exec.Command("kubectl", "-n", "mimir", "port-forward",
-		"deploy/mimir", fmt.Sprintf("%d:8080", port))
-	if err := pf.Start(); err != nil {
-		return "", fmt.Errorf("start port-forward: %w", err)
-	}
-	defer func() {
-		_ = pf.Process.Kill()
-		_ = pf.Wait()
-	}()
-
-	deadline := time.Now().Add(5 * time.Second)
-	for time.Now().Before(deadline) {
-		c, derr := net.DialTimeout("tcp", fmt.Sprintf("127.0.0.1:%d", port), 200*time.Millisecond)
-		if derr == nil {
-			_ = c.Close()
-			break
-		}
-		time.Sleep(50 * time.Millisecond)
-	}
-
-	resp, err := http.Get(fmt.Sprintf("http://127.0.0.1:%d/runtime_config", port))
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-	body, err := io.ReadAll(resp.Body)
-	return string(body), err
+	return fetchViaPortForward("mimir", "mimir", 8080, "/runtime_config")
 }
 
 func freeLocalPort() (int, error) {
