@@ -20,10 +20,12 @@ import (
 	"github.com/tjorri/runtime-overrides-operator/test/utils"
 )
 
-// projectImage is the manager image built by `make docker-build` and loaded
-// into the KinD cluster ahead of the suite. The Helm chart's image.repository
-// is overridden to point at this tag.
-const projectImage = "example.com/runtime-overrides-operator:e2e"
+// projectImage is the manager image built by `make e2e-image` and pushed
+// to the local OCI registry sidecar that the kind cluster mirrors. The
+// host pushes to `localhost:5001/...`; containerd inside the cluster
+// rewrites that to `kind-registry:5000/...` (see test/e2e/kind-config.yaml).
+// The Helm values file pins the chart's image.repository to this name.
+const projectImage = "localhost:5001/runtime-overrides-operator:e2e"
 
 // operatorNamespace is where the chart is installed.
 const operatorNamespace = "runtime-overrides-operator-system"
@@ -43,7 +45,7 @@ var repoRoot string
 // Optional environment variables:
 //   - CERT_MANAGER_INSTALL_SKIP=true: assume cert-manager is already there.
 //   - E2E_SKIP_IMAGE_BUILD=true:      assume the operator image is already
-//     built and loaded into KinD. Useful for fast local iteration.
+//     pushed to the local registry. Useful for fast local iteration.
 var (
 	skipCertManagerInstall        = os.Getenv("CERT_MANAGER_INSTALL_SKIP") == "true"
 	skipImageBuild                = os.Getenv("E2E_SKIP_IMAGE_BUILD") == "true"
@@ -62,14 +64,13 @@ var _ = BeforeSuite(func() {
 	manifestsDir = filepath.Join(wd, "manifests")
 
 	if !skipImageBuild {
-		By("building the manager image")
-		cmd := exec.Command("make", "docker-build", fmt.Sprintf("IMG=%s", projectImage))
-		_, err := utils.Run(cmd)
-		ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to build the manager image")
-
-		By("loading the manager image into KinD")
-		err = utils.LoadImageToKindClusterWithName(projectImage)
-		ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to load the manager image into KinD")
+		By("building and pushing the manager image to the local e2e registry")
+		// `make e2e-image` builds with ko and pushes to localhost:5001
+		// (the kind-registry sidecar). Faster than the previous
+		// `docker-build` + `kind load docker-image` pair (~30s saved per
+		// run) because we avoid the tar-stream into kind's containerd.
+		_, err := utils.Run(exec.Command("make", "e2e-image"))
+		ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to build/push the manager image")
 	}
 
 	if !skipCertManagerInstall {
@@ -82,17 +83,37 @@ var _ = BeforeSuite(func() {
 		}
 	}
 
-	By("deploying Loki single-binary")
+	By("deploying Loki + Mimir single-binaries (parallel)")
+	// Apply both serially (cheap), then wait for both rollouts
+	// concurrently. The rollout-status wait is what consumes wall-time
+	// (each pod pulls a ~100-200MB upstream image and runs startup
+	// probes), so overlapping the two waits saves ~60s on a cold pull.
+	//
+	// utils.Run() can't be used in parallel because it calls os.Chdir()
+	// which is process-global. Use raw exec.Command for the goroutines.
 	_, err = utils.Run(exec.Command("kubectl", "apply", "-f", filepath.Join(manifestsDir, "loki.yaml")))
 	Expect(err).NotTo(HaveOccurred())
-	_, err = utils.Run(exec.Command("kubectl", "-n", "loki", "rollout", "status", "deploy/loki", "--timeout=180s"))
-	Expect(err).NotTo(HaveOccurred(), "Loki failed to become ready")
-
-	By("deploying Mimir single-binary")
 	_, err = utils.Run(exec.Command("kubectl", "apply", "-f", filepath.Join(manifestsDir, "mimir.yaml")))
 	Expect(err).NotTo(HaveOccurred())
-	_, err = utils.Run(exec.Command("kubectl", "-n", "mimir", "rollout", "status", "deploy/mimir", "--timeout=180s"))
-	Expect(err).NotTo(HaveOccurred(), "Mimir failed to become ready")
+
+	rolloutReady := func(ns, deploy string) <-chan error {
+		ch := make(chan error, 1)
+		go func() {
+			cmd := exec.Command("kubectl", "-n", ns, "rollout", "status",
+				"deploy/"+deploy, "--timeout=180s")
+			out, err := cmd.CombinedOutput()
+			if err != nil {
+				ch <- fmt.Errorf("rollout %s/%s: %w\n%s", ns, deploy, err, out)
+				return
+			}
+			ch <- nil
+		}()
+		return ch
+	}
+	lokiReady := rolloutReady("loki", "loki")
+	mimirReady := rolloutReady("mimir", "mimir")
+	Expect(<-lokiReady).NotTo(HaveOccurred(), "Loki failed to become ready")
+	Expect(<-mimirReady).NotTo(HaveOccurred(), "Mimir failed to become ready")
 
 	By("installing the operator Helm chart")
 	// Use server-side apply for idempotency — re-runs (E2E_SKIP_TEARDOWN

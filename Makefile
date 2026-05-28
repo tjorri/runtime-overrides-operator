@@ -151,9 +151,33 @@ test: manifests generate fmt vet setup-envtest ## Run tests.
 # CertManager is installed by default; skip with:
 # - CERT_MANAGER_INSTALL_SKIP=true
 KIND_CLUSTER ?= runtime-overrides-operator-test-e2e
+KIND_REGISTRY_NAME ?= kind-registry
+KIND_REGISTRY_PORT ?= 5001
+E2E_IMAGE_REPO ?= localhost:$(KIND_REGISTRY_PORT)/runtime-overrides-operator
+E2E_IMAGE_TAG ?= e2e
+
+.PHONY: e2e-registry-up
+e2e-registry-up: ## Start the local OCI registry sidecar the e2e suite pushes the operator image to.
+	@if [ -z "$$(docker ps -q -f name=^/$(KIND_REGISTRY_NAME)$$)" ]; then \
+	  echo "Starting local registry $(KIND_REGISTRY_NAME) on 127.0.0.1:$(KIND_REGISTRY_PORT)" ; \
+	  docker run -d --restart=always \
+	    -p 127.0.0.1:$(KIND_REGISTRY_PORT):5000 \
+	    --network bridge \
+	    --name $(KIND_REGISTRY_NAME) \
+	    registry:2 >/dev/null ; \
+	else \
+	  echo "Local registry $(KIND_REGISTRY_NAME) already running." ; \
+	fi
+
+.PHONY: e2e-registry-down
+e2e-registry-down: ## Stop and remove the local OCI registry sidecar.
+	@if [ -n "$$(docker ps -aq -f name=^/$(KIND_REGISTRY_NAME)$$)" ]; then \
+	  echo "Removing local registry $(KIND_REGISTRY_NAME)..." ; \
+	  docker rm -f $(KIND_REGISTRY_NAME) >/dev/null ; \
+	fi
 
 .PHONY: setup-test-e2e
-setup-test-e2e: ## Set up a Kind cluster for e2e tests if it does not exist
+setup-test-e2e: e2e-registry-up ## Set up a Kind cluster (with local-registry mirror) for e2e tests if it does not exist
 	@command -v $(KIND) >/dev/null 2>&1 || { \
 		echo "Kind is not installed. Please install Kind manually."; \
 		exit 1; \
@@ -162,9 +186,23 @@ setup-test-e2e: ## Set up a Kind cluster for e2e tests if it does not exist
 		*"$(KIND_CLUSTER)"*) \
 			echo "Kind cluster '$(KIND_CLUSTER)' already exists. Skipping creation." ;; \
 		*) \
-			echo "Creating Kind cluster '$(KIND_CLUSTER)'..."; \
-			$(KIND) create cluster --name $(KIND_CLUSTER) ;; \
+			echo "Creating Kind cluster '$(KIND_CLUSTER)' with local-registry containerd patch..."; \
+			$(KIND) create cluster --name $(KIND_CLUSTER) --config test/e2e/kind-config.yaml ;; \
 	esac
+	@# Attach the registry to the kind Docker network so containerd in the
+	@# cluster can reach it via the in-network hostname `kind-registry`
+	@# (the rewrite is configured in test/e2e/kind-config.yaml).
+	@if ! docker network inspect kind --format '{{range .Containers}}{{.Name}} {{end}}' 2>/dev/null | grep -qw $(KIND_REGISTRY_NAME); then \
+	  echo "Connecting $(KIND_REGISTRY_NAME) to the kind Docker network..." ; \
+	  docker network connect kind $(KIND_REGISTRY_NAME) >/dev/null 2>&1 || true ; \
+	fi
+
+.PHONY: e2e-image
+e2e-image: ko ## Build the operator image and push it to the e2e local registry (much faster than `kind load`).
+	@host_platform="linux/$$(go env GOARCH)" ; \
+	  echo "ko build → $(E2E_IMAGE_REPO):$(E2E_IMAGE_TAG) ($$host_platform, local registry)" ; \
+	  VERSION="$(E2E_IMAGE_TAG)" KO_DOCKER_REPO="$(E2E_IMAGE_REPO)" \
+	    $(KO) build --bare --tags "$(E2E_IMAGE_TAG)" --platform="$$host_platform" ./cmd
 
 .PHONY: test-e2e
 # -timeout=25m overrides go test's 10m default. On local hardware the
@@ -178,6 +216,8 @@ test-e2e: setup-test-e2e manifests generate fmt vet ## Run the e2e tests. Expect
 .PHONY: cleanup-test-e2e
 cleanup-test-e2e: ## Tear down the Kind cluster used for e2e tests
 	@$(KIND) delete cluster --name $(KIND_CLUSTER)
+	@# Leave the registry container running by default — re-runs reuse the
+	@# already-pulled image layers. Use `make e2e-registry-down` to remove.
 
 .PHONY: lint
 lint: golangci-lint ## Run golangci-lint linter
