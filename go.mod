@@ -7,7 +7,7 @@ require (
 	github.com/grafana/mimir v1.3.1-0.20260527172526-b10e9a09fae1
 	github.com/onsi/ginkgo/v2 v2.29.0
 	github.com/onsi/gomega v1.41.0
-	github.com/prometheus/client_golang v1.23.3-0.20260518105423-c9d5bc4c50a9
+	github.com/prometheus/client_golang v1.23.3-0.20260529153740-02eaf492695d
 	go.yaml.in/yaml/v3 v3.0.4
 	gopkg.in/yaml.v2 v2.4.0
 	gopkg.in/yaml.v3 v3.0.1
