@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.2.3](https://github.com/tjorri/runtime-overrides-operator/compare/v0.2.2...v0.2.3) (2026-05-30)
+
+
+### Performance
+
+* **e2e:** make the e2e suite parallel-capable and distroless-safe (modest wall-clock gain) ([#21](https://github.com/tjorri/runtime-overrides-operator/issues/21)) ([3b24a26](https://github.com/tjorri/runtime-overrides-operator/commit/3b24a2697abcf469970590603fc60f0d1a695414))
+
+
+### Other Changes
+
+* **deps:** Update github.com/prometheus/client_golang digest to 02eaf49 ([#23](https://github.com/tjorri/runtime-overrides-operator/issues/23)) ([5a31b51](https://github.com/tjorri/runtime-overrides-operator/commit/5a31b51d47c6890e7f6f41269c5b74cd8c1e3e74))
+
 ## [0.2.2](https://github.com/tjorri/runtime-overrides-operator/compare/v0.2.1...v0.2.2) (2026-05-28)
 
 
