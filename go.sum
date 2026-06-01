@@ -475,6 +475,8 @@ github.com/grafana/mimir v1.3.1-0.20260527123344-50010a787b79 h1:jFlsiWk5ha/70B5
 github.com/grafana/mimir v1.3.1-0.20260527123344-50010a787b79/go.mod h1:zl86+2QvyrApLHFDRPsa0Tiq6jSwAW1NLLIfhMtDcGY=
 github.com/grafana/mimir v1.3.1-0.20260527172526-b10e9a09fae1 h1:EcFLU2Q75979SihJhP/a6IcqpR/q2DcVLt5QELsQNkM=
 github.com/grafana/mimir v1.3.1-0.20260527172526-b10e9a09fae1/go.mod h1:zl86+2QvyrApLHFDRPsa0Tiq6jSwAW1NLLIfhMtDcGY=
+github.com/grafana/mimir v1.3.1-0.20260530073726-b71a23f49758 h1:pEyM/8okFy4ndkX9jKxvJZcwSlhANiRdYh/cfziXMu8=
+github.com/grafana/mimir v1.3.1-0.20260530073726-b71a23f49758/go.mod h1:5XTRq7MnAy3szKfxMLF2PIKV3BFW8yA1lOTb+AQMx+M=
 github.com/grafana/mimir-otlptranslator v0.0.0-20251017074411-ea1e8f863e1d h1:k4NIVPYPP0sLJoGNzGwoQs2MpnWTvTcgbWPCzfdX66c=
 github.com/grafana/mimir-otlptranslator v0.0.0-20251017074411-ea1e8f863e1d/go.mod h1:vRYWnXvI6aWGpsdY/mOT/cbeVRBlPWtBNDb7kGR3uKM=
 github.com/grafana/mimir-otlptranslator v0.0.0-20251205064431-9c8d926df4b8 h1:FEyngFjZJdExJNVD0WOXppZ3MlMXh9OPBrD1yOTUI9k=
