@@ -4,7 +4,7 @@ go 1.26.3
 
 require (
 	github.com/grafana/loki/v3 v3.7.2
-	github.com/grafana/mimir v1.3.1-0.20260527172526-b10e9a09fae1
+	github.com/grafana/mimir v1.3.1-0.20260530073726-b71a23f49758
 	github.com/onsi/ginkgo/v2 v2.29.0
 	github.com/onsi/gomega v1.41.0
 	github.com/prometheus/client_golang v1.23.3-0.20260529153740-02eaf492695d
@@ -181,7 +181,7 @@ require (
 	github.com/open-telemetry/opentelemetry-collector-contrib/pkg/pdatautil v0.153.0 // indirect
 	github.com/open-telemetry/opentelemetry-collector-contrib/processor/deltatocumulativeprocessor v0.153.0 // indirect
 	github.com/opentracing-contrib/go-grpc v0.1.3 // indirect
-	github.com/opentracing-contrib/go-stdlib v1.1.1 // indirect
+	github.com/opentracing-contrib/go-stdlib v1.1.2-0.20260528155411-f102363ff79b // indirect
 	github.com/opentracing/opentracing-go v1.2.1-0.20220228012449-10b1cf09e00b // indirect
 	github.com/pb33f/jsonpath v0.8.2 // indirect
 	github.com/pb33f/libopenapi v0.37.0 // indirect
