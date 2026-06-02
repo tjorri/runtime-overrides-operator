@@ -43,7 +43,7 @@ jobs:
       - name: Install kind
         env:
           # Pinned via Renovate's custom regex manager (see renovate.json).
-          KIND_VERSION: v0.31.0
+          KIND_VERSION: v0.32.0
         run: |
           set -euo pipefail
           curl -Lo ./kind "https://kind.sigs.k8s.io/dl/${KIND_VERSION}/kind-linux-$(go env GOARCH)"
