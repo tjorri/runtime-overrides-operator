@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.2.4](https://github.com/tjorri/runtime-overrides-operator/compare/v0.2.3...v0.2.4) (2026-06-04)
+
+
+### Other Changes
+
+* **deps:** Update dependency kubernetes-sigs/kind to v0.32.0 ([#27](https://github.com/tjorri/runtime-overrides-operator/issues/27)) ([32ad1cb](https://github.com/tjorri/runtime-overrides-operator/commit/32ad1cb8a2416f96be530df304154d07f70a887f))
+* **deps:** Update github.com/prometheus/client_golang digest to 3537b20 ([#25](https://github.com/tjorri/runtime-overrides-operator/issues/25)) ([4fc9972](https://github.com/tjorri/runtime-overrides-operator/commit/4fc9972c0cb90ffc25b8fb70667d6648ebc9ff4a))
+* **deps:** Update grafana upstream (loki+mimir) to 38dd049 ([#28](https://github.com/tjorri/runtime-overrides-operator/issues/28)) ([19c61bf](https://github.com/tjorri/runtime-overrides-operator/commit/19c61bf7d56895d73ab772515009a4a051c9f597))
+
 ## [0.2.3](https://github.com/tjorri/runtime-overrides-operator/compare/v0.2.2...v0.2.3) (2026-06-01)
 
 
