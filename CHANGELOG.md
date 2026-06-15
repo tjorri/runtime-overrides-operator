@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.2.5](https://github.com/tjorri/runtime-overrides-operator/compare/v0.2.4...v0.2.5) (2026-06-15)
+
+
+### Other Changes
+
+* **deps:** co-bump loki to main digest to pair with mimir 2ef9a3d ([#33](https://github.com/tjorri/runtime-overrides-operator/issues/33)) ([701d8e0](https://github.com/tjorri/runtime-overrides-operator/commit/701d8e04e3cdd173c39e1eff3628f464af87ec7f))
+* **deps:** Update github actions to v4 ([#31](https://github.com/tjorri/runtime-overrides-operator/issues/31)) ([c16ab68](https://github.com/tjorri/runtime-overrides-operator/commit/c16ab687d4ce60641d722e3685bbe40be80ca896))
+* **deps:** Update go module patch+minor ([#30](https://github.com/tjorri/runtime-overrides-operator/issues/30)) ([6061134](https://github.com/tjorri/runtime-overrides-operator/commit/6061134aec475e2f77123536fa7dad6492e23305))
+
 ## [0.2.4](https://github.com/tjorri/runtime-overrides-operator/compare/v0.2.3...v0.2.4) (2026-06-04)
 
 

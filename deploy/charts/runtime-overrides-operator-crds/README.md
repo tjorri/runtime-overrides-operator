@@ -7,7 +7,7 @@ ADR 0006 for why this is a separate chart from the operator.
 
 Apache-2.0 licensed.
 
-![Version: 0.2.4](https://img.shields.io/badge/Version-0.2.4-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 0.2.4](https://img.shields.io/badge/AppVersion-0.2.4-informational?style=flat-square)
+![Version: 0.2.5](https://img.shields.io/badge/Version-0.2.5-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 0.2.5](https://img.shields.io/badge/AppVersion-0.2.5-informational?style=flat-square)
 
 This Apache-2.0 chart installs only the two CustomResourceDefinitions
 that runtime-overrides-operator depends on:
@@ -39,7 +39,7 @@ for the full rationale.
 
 ```sh
 helm install ro-op-crds oci://ghcr.io/tjorri/charts/runtime-overrides-operator-crds \
-  --version 0.2.4
+  --version 0.2.5
 ```
 
 Then install the operator chart with CRD installation disabled (otherwise
@@ -47,7 +47,7 @@ the two charts conflict on the same resources):
 
 ```sh
 helm install ro-op oci://ghcr.io/tjorri/charts/runtime-overrides-operator \
-  --version 0.2.4 \
+  --version 0.2.5 \
   --namespace runtime-overrides-system --create-namespace \
   --set crds.install=false
 ```
@@ -73,7 +73,7 @@ single aggregated YAML asset on the GitHub release. Apply it with
 `kubectl`:
 
 ```sh
-kubectl apply -f https://github.com/tjorri/runtime-overrides-operator/releases/download/v0.2.4/crds.yaml
+kubectl apply -f https://github.com/tjorri/runtime-overrides-operator/releases/download/v0.2.5/crds.yaml
 ```
 
 ## Verifying signature and provenance

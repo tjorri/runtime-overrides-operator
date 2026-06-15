@@ -5,7 +5,7 @@ for Grafana Loki and Mimir from declarative LokiTenantOverride /
 MimirTenantOverride CRDs. The chart is Apache-2.0; the operator binary
 it deploys is AGPL-3.0. See NOTICE at the repo root for details.
 
-![Version: 0.2.4](https://img.shields.io/badge/Version-0.2.4-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 0.2.4](https://img.shields.io/badge/AppVersion-0.2.4-informational?style=flat-square)
+![Version: 0.2.5](https://img.shields.io/badge/Version-0.2.5-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 0.2.5](https://img.shields.io/badge/AppVersion-0.2.5-informational?style=flat-square)
 
 This Apache-2.0 chart installs the AGPL-3.0-licensed runtime-overrides-operator
 binary. See the [NOTICE at the repo root](https://github.com/tjorri/runtime-overrides-operator/blob/main/NOTICE)
@@ -23,7 +23,7 @@ for the license-split rationale.
 
 ```sh
 helm install ro-op oci://ghcr.io/tjorri/charts/runtime-overrides-operator \
-  --version 0.2.4 \
+  --version 0.2.5 \
   --namespace runtime-overrides-system --create-namespace
 ```
 
