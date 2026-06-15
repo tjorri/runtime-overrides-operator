@@ -19,7 +19,7 @@
       "automerge": false,
       "labels": ["dependencies", "upstream-validation"],
       "commitMessageTopic": "Grafana upstream validation modules",
-      "description": "Loki and Mimir validation imports drive the operator's validation behavior. E2e suite must pass before merge."
+      "description": "Loki and Mimir validation imports drive the operator's validation behavior. Both are tracked as main-branch digests (pseudo-versions) and bumped together so their shared github.com/grafana/dskit stays consistent. Mimir has no importable release tag (see the >=2.0.0 rule below) and Loki's release tags lag Mimir's main by months, so pairing a Loki *release* with a Mimir *main* digest fails to compile — dskit changed the dns.NewProvider signature and the two sides skew (PR #29). E2e suite must pass before merge."
     },
     {
       "matchManagers": ["gomod"],
@@ -29,9 +29,9 @@
     },
     {
       "matchManagers": ["gomod"],
-      "matchPackageNames": ["gopkg.in/yaml.v2"],
-      "enabled": false,
-      "description": "gopkg.in/yaml.v2 and gopkg.in/yaml.v3 are SEPARATE Go modules under semver-import-versioning — the vN is part of the module path, not just a version tag. The project deliberately imports both: yaml.v2 because Loki's upstream Limits API uses it; yaml.v3 (and go.yaml.in/yaml/v3) for Mimir's. Renovate misinterprets v2 → v3 as a major version bump for the same module and produces an invalid go.mod (PR #10, closed). gopkg.in/yaml.v2 is in maintenance mode and unlikely to see further releases anyway."
+      "matchPackageNames": ["github.com/grafana/loki/v3"],
+      "allowedVersions": "<3.0.0",
+      "description": "Loki is intentionally tracked on a main-branch pseudo-version (base v3.0.0-<date>-<hash>), not its release tags. Loki cuts release tags (v3.6.x, v3.7.x, ...) from release branches that are NOT ancestors of main, so Go derives a v3.0.0-prerelease pseudo-version for main commits — which sorts BELOW those tags. Without this guard Renovate would 'upgrade' Loki from the main digest to the latest release tag (e.g. v3.7.2), whose dskit pin lags Mimir's main and breaks the build (dns.NewProvider skew — PR #29). '<3.0.0' blocks the release tags while still allowing same-track digest bumps (the analogous Mimir '>=2.0.0' rule likewise does not block its v1.3.1-0 digest bumps). Revisit if Loki cuts a release that catches up to Mimir's main dskit. NOTE: Loki migrated Limits parsing from gopkg.in/yaml.v2 to go.yaml.in/yaml/v4 after v3.7.2; that obsoleted the former gopkg.in/yaml.v2 pin rule (PR #10), which has been removed."
     },
     {
       "matchManagers": ["gomod"],
