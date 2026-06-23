@@ -5,11 +5,11 @@ go 1.26.4
 require (
 	github.com/grafana/loki/v3 v3.0.0-20260612234421-1983d05237f7
 	github.com/grafana/mimir v1.3.1-0.20260614202144-2ef9a3d46024
-	github.com/onsi/ginkgo/v2 v2.31.0
-	github.com/onsi/gomega v1.42.0
+	github.com/onsi/ginkgo/v2 v2.32.0
+	github.com/onsi/gomega v1.42.1
 	github.com/prometheus/client_golang v1.23.3-0.20260602051030-3537b20ac86b
 	go.yaml.in/yaml/v3 v3.0.4
-	go.yaml.in/yaml/v4 v4.0.0-rc.4
+	go.yaml.in/yaml/v4 v4.0.0-rc.6
 	gopkg.in/yaml.v3 v3.0.1
 	k8s.io/api v0.36.2
 	k8s.io/apimachinery v0.36.2
