@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.2.5](https://github.com/tjorri/runtime-overrides-operator/compare/v0.2.4...v0.2.5) (2026-08-23)
+
+
+### Documentation
+
+* **renovate:** correct the fork-pin maintenance note ([#42](https://github.com/tjorri/runtime-overrides-operator/issues/42)) ([8a9439e](https://github.com/tjorri/runtime-overrides-operator/commit/8a9439e65ec04a21971767f6b481d8cfe86d1b55))
+
+
+### Other Changes
+
+* **deps:** co-bump loki to main digest to pair with mimir 2ef9a3d ([#33](https://github.com/tjorri/runtime-overrides-operator/issues/33)) ([701d8e0](https://github.com/tjorri/runtime-overrides-operator/commit/701d8e04e3cdd173c39e1eff3628f464af87ec7f))
+* **deps:** Update ghcr.io/devcontainers/features/docker-in-docker Docker tag to v4 ([#38](https://github.com/tjorri/runtime-overrides-operator/issues/38)) ([0ecdc7d](https://github.com/tjorri/runtime-overrides-operator/commit/0ecdc7d346d81106c890cc04e5d6aab6cb27fb49))
+* **deps:** Update github actions to v4 ([#31](https://github.com/tjorri/runtime-overrides-operator/issues/31)) ([c16ab68](https://github.com/tjorri/runtime-overrides-operator/commit/c16ab687d4ce60641d722e3685bbe40be80ca896))
+* **deps:** Update github actions to v7 ([#37](https://github.com/tjorri/runtime-overrides-operator/issues/37)) ([c42b8af](https://github.com/tjorri/runtime-overrides-operator/commit/c42b8afcc61c3f23d8c471f64f3f5ebdc44acedf))
+* **deps:** Update go module patch+minor ([#30](https://github.com/tjorri/runtime-overrides-operator/issues/30)) ([6061134](https://github.com/tjorri/runtime-overrides-operator/commit/6061134aec475e2f77123536fa7dad6492e23305))
+* **deps:** Update go module patch+minor ([#36](https://github.com/tjorri/runtime-overrides-operator/issues/36)) ([b9fb400](https://github.com/tjorri/runtime-overrides-operator/commit/b9fb400e0396c38a97f07db8c3a7fad65eedb3e7))
+* **deps:** Update golang Docker tag to v1.27 ([#41](https://github.com/tjorri/runtime-overrides-operator/issues/41)) ([f10f075](https://github.com/tjorri/runtime-overrides-operator/commit/f10f075e84e646b6a14b3e970fb017c47bee3f93))
+* **deps:** Update grafana upstream (loki+mimir) ([#35](https://github.com/tjorri/runtime-overrides-operator/issues/35)) ([5fb452e](https://github.com/tjorri/runtime-overrides-operator/commit/5fb452ee44774618da82d9794807849017c786e2))
+* **deps:** Update module github.com/google/cel-go to v0.29.0 [SECURITY] ([#39](https://github.com/tjorri/runtime-overrides-operator/issues/39)) ([f5037d2](https://github.com/tjorri/runtime-overrides-operator/commit/f5037d22da9d8d0c6159aecc83a2cdb41e4bc77a))
+* **deps:** Update module google.golang.org/grpc to v1.82.1 [SECURITY] ([#40](https://github.com/tjorri/runtime-overrides-operator/issues/40)) ([c62c60e](https://github.com/tjorri/runtime-overrides-operator/commit/c62c60ef651bff49dc5b6289ff62cc254d0bf821))
+
 ## [0.2.4](https://github.com/tjorri/runtime-overrides-operator/compare/v0.2.3...v0.2.4) (2026-06-04)
 
 
