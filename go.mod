@@ -3,8 +3,8 @@ module github.com/tjorri/runtime-overrides-operator
 go 1.26.6
 
 require (
-	github.com/grafana/loki/v3 v3.0.0-20260823153252-bf251918ac34
-	github.com/grafana/mimir v1.3.1-0.20260821223754-2ee738467e34
+	github.com/grafana/loki/v3 v3.0.0-20260824083942-a0b56b8aae72
+	github.com/grafana/mimir v1.3.1-0.20260824111252-076579f6498c
 	github.com/onsi/ginkgo/v2 v2.32.1
 	github.com/onsi/gomega v1.42.1
 	github.com/prometheus/client_golang v1.24.2-0.20260820153414-89c60c055469
@@ -19,7 +19,7 @@ require (
 
 require (
 	cel.dev/expr v0.25.3 // indirect
-	cloud.google.com/go/auth v0.23.1 // indirect
+	cloud.google.com/go/auth v0.23.2 // indirect
 	cloud.google.com/go/auth/oauth2adapt v0.2.8 // indirect
 	cloud.google.com/go/compute/metadata v0.9.0 // indirect
 	dario.cat/mergo v1.0.2 // indirect
@@ -169,7 +169,7 @@ require (
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/power-devops/perfstat v0.0.0-20260805114148-88456608a4f6 // indirect
 	github.com/prometheus/alertmanager v0.33.1 // indirect
-	github.com/prometheus/client_golang/exp v0.0.0-20260812154952-0c5dccd910c0 // indirect
+	github.com/prometheus/client_golang/exp v0.0.0-20260820153414-89c60c055469 // indirect
 	github.com/prometheus/client_model v0.6.2 // indirect
 	github.com/prometheus/common v0.70.1 // indirect
 	github.com/prometheus/exporter-toolkit v0.17.1 // indirect
