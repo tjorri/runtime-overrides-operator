@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.2.6](https://github.com/tjorri/runtime-overrides-operator/compare/v0.2.5...v0.2.6) (2026-08-24)
+
+
+### Other Changes
+
+* **deps:** Update github.com/prometheus/client_golang digest to 89c60c0 ([#43](https://github.com/tjorri/runtime-overrides-operator/issues/43)) ([ba9cb53](https://github.com/tjorri/runtime-overrides-operator/commit/ba9cb534e7f06538288483d04d4a4e48d4c95a85))
+* **deps:** Update grafana upstream (loki+mimir) ([#45](https://github.com/tjorri/runtime-overrides-operator/issues/45)) ([c11fd80](https://github.com/tjorri/runtime-overrides-operator/commit/c11fd8086401d4e15e23390efd0ad6f8f200465b))
+
 ## [0.2.5](https://github.com/tjorri/runtime-overrides-operator/compare/v0.2.4...v0.2.5) (2026-08-23)
 
 
