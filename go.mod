@@ -6,14 +6,14 @@ require (
 	github.com/grafana/loki/v3 v3.0.0-20260824083942-a0b56b8aae72
 	github.com/grafana/mimir v1.3.1-0.20260824111252-076579f6498c
 	github.com/onsi/ginkgo/v2 v2.32.1
-	github.com/onsi/gomega v1.42.1
+	github.com/onsi/gomega v1.43.0
 	github.com/prometheus/client_golang v1.24.2-0.20260820153414-89c60c055469
 	go.yaml.in/yaml/v3 v3.0.5
 	go.yaml.in/yaml/v4 v4.0.0-rc.6
 	gopkg.in/yaml.v3 v3.0.1
-	k8s.io/api v0.36.4
-	k8s.io/apimachinery v0.36.4
-	k8s.io/client-go v0.36.4
+	k8s.io/api v0.37.0
+	k8s.io/apimachinery v0.37.0
+	k8s.io/client-go v0.37.0
 	sigs.k8s.io/controller-runtime v0.24.1
 )
 
@@ -262,7 +262,7 @@ require (
 	k8s.io/component-base v0.36.1 // indirect
 	k8s.io/klog/v2 v2.140.0 // indirect
 	k8s.io/kube-openapi v0.0.0-20260721132016-d427ff9ee9ad // indirect
-	k8s.io/streaming v0.36.4 // indirect
+	k8s.io/streaming v0.37.0 // indirect
 	k8s.io/utils v0.0.0-20260707023825-cf1189d6abe3 // indirect
 	sigs.k8s.io/apiserver-network-proxy/konnectivity-client v0.35.0 // indirect
 	sigs.k8s.io/json v0.0.0-20250730193827-2d320260d730 // indirect
