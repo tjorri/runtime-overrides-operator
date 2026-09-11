@@ -7,7 +7,7 @@ require (
 	github.com/grafana/mimir v1.3.1-0.20260824111252-076579f6498c
 	github.com/onsi/ginkgo/v2 v2.32.1
 	github.com/onsi/gomega v1.42.1
-	github.com/prometheus/client_golang v1.24.2-0.20260820153414-89c60c055469
+	github.com/prometheus/client_golang v1.24.2-0.20260910191836-3f5d6801b956
 	go.yaml.in/yaml/v3 v3.0.5
 	go.yaml.in/yaml/v4 v4.0.0-rc.6
 	gopkg.in/yaml.v3 v3.0.1
@@ -174,7 +174,7 @@ require (
 	github.com/prometheus/common v0.70.1 // indirect
 	github.com/prometheus/exporter-toolkit v0.17.1 // indirect
 	github.com/prometheus/otlptranslator v1.0.0 // indirect
-	github.com/prometheus/procfs v0.21.1 // indirect
+	github.com/prometheus/procfs v0.22.0 // indirect
 	github.com/prometheus/prometheus v1.99.0 // indirect
 	github.com/prometheus/sigv4 v0.4.1 // indirect
 	github.com/redis/go-redis/v9 v9.21.0 // indirect
