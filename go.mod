@@ -3,8 +3,8 @@ module github.com/tjorri/runtime-overrides-operator
 go 1.26.6
 
 require (
-	github.com/grafana/loki/v3 v3.0.0-20260824083942-a0b56b8aae72
-	github.com/grafana/mimir v1.3.1-0.20260824111252-076579f6498c
+	github.com/grafana/loki/v3 36ab332c8b5d
+	github.com/grafana/mimir 86811cf62aeb
 	github.com/onsi/ginkgo/v2 v2.32.1
 	github.com/onsi/gomega v1.42.1
 	github.com/prometheus/client_golang v1.24.2-0.20260820153414-89c60c055469
