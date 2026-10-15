@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.2.7](https://github.com/tjorri/runtime-overrides-operator/compare/v0.2.6...v0.2.7) (2026-10-15)
+
+
+### Other Changes
+
+* **deps:** Update dependency kubernetes-sigs/kind to v0.33.0 ([#47](https://github.com/tjorri/runtime-overrides-operator/issues/47)) ([f0f2afb](https://github.com/tjorri/runtime-overrides-operator/commit/f0f2afb7a5d32486c0d0258008c347b9ef52439d))
+* **deps:** Update github actions ([#46](https://github.com/tjorri/runtime-overrides-operator/issues/46)) ([0175f8b](https://github.com/tjorri/runtime-overrides-operator/commit/0175f8b04fad462e2d396f4c66fa2eb839c6eb59))
+* **deps:** Update go module patch+minor ([#49](https://github.com/tjorri/runtime-overrides-operator/issues/49)) ([2eb3b2f](https://github.com/tjorri/runtime-overrides-operator/commit/2eb3b2fbae5523d925223588a7dd63d9bf25c642))
+* **deps:** Update grafana upstream (loki+mimir) ([#48](https://github.com/tjorri/runtime-overrides-operator/issues/48)) ([97475bd](https://github.com/tjorri/runtime-overrides-operator/commit/97475bd99fcdaf2c34614a45b229fc6ea0d27fdb))
+* **renovate:** track Makefile tool pins and fix the helm-docs manager ([#53](https://github.com/tjorri/runtime-overrides-operator/issues/53)) ([5058334](https://github.com/tjorri/runtime-overrides-operator/commit/505833474347b1a2ec4e253e11f4c5b78d39627a))
+
 ## [0.2.6](https://github.com/tjorri/runtime-overrides-operator/compare/v0.2.5...v0.2.6) (2026-08-24)
 
 
