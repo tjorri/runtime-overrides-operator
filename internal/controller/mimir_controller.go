@@ -134,7 +134,7 @@ func (r *MimirReconciler) Reconcile(ctx context.Context, _ reconcile.Request) (r
 	metrics.LastReconcileTimestamp.WithLabelValues(mimirTargetLabel).Set(float64(time.Now().Unix()))
 
 	if conflictHit := r.updateStatuses(ctx, envelopes, valid, allConflicts, res); conflictHit {
-		return reconcile.Result{Requeue: true}, nil
+		return reconcile.Result{RequeueAfter: statusConflictRequeueDelay}, nil
 	}
 
 	return reconcile.Result{}, nil

@@ -4,8 +4,16 @@
 package controller
 
 import (
+	"time"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
+
+// statusConflictRequeueDelay is how long a reconciler waits before retrying
+// after a 409 Conflict on a status write. The conflict means the informer
+// cache served a stale resourceVersion; a short fixed delay gives it time to
+// catch up. Replaces the deprecated rate-limited Result.Requeue.
+const statusConflictRequeueDelay = time.Second
 
 // upsertCondition returns the conditions slice with the given condition
 // merged in. If a condition with the same Type exists and the new condition

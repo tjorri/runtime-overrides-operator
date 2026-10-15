@@ -167,7 +167,7 @@ func (r *LokiReconciler) Reconcile(ctx context.Context, _ reconcile.Request) (re
 	// logged but don't fail the reconcile — the ConfigMap is already correct.
 	// A 409 from a stale cache requeues so the next pass uses fresh CRs.
 	if conflictHit := r.updateStatuses(ctx, envelopes, valid, allConflicts, res); conflictHit {
-		return reconcile.Result{Requeue: true}, nil
+		return reconcile.Result{RequeueAfter: statusConflictRequeueDelay}, nil
 	}
 
 	return reconcile.Result{}, nil
