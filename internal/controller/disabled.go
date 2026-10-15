@@ -43,7 +43,7 @@ func (r *LokiDisabledReconciler) Reconcile(ctx context.Context, req reconcile.Re
 	}
 	if err := r.Client.Status().Update(ctx, cr); err != nil {
 		if apierrors.IsConflict(err) {
-			return reconcile.Result{Requeue: true}, nil
+			return reconcile.Result{RequeueAfter: statusConflictRequeueDelay}, nil
 		}
 		return reconcile.Result{}, client.IgnoreNotFound(fmt.Errorf("update status: %w", err))
 	}
@@ -82,7 +82,7 @@ func (r *MimirDisabledReconciler) Reconcile(ctx context.Context, req reconcile.R
 	}
 	if err := r.Client.Status().Update(ctx, cr); err != nil {
 		if apierrors.IsConflict(err) {
-			return reconcile.Result{Requeue: true}, nil
+			return reconcile.Result{RequeueAfter: statusConflictRequeueDelay}, nil
 		}
 		return reconcile.Result{}, client.IgnoreNotFound(fmt.Errorf("update status: %w", err))
 	}
