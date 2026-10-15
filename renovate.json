@@ -106,10 +106,10 @@
   "customManagers": [
     {
       "customType": "regex",
-      "description": "Bump helm-docs version pinned in .github/workflows/lint.yml.",
+      "description": "Bump helm-docs version pinned in .github/workflows/lint.yml and release-please-docs.yml.",
       "managerFilePatterns": ["/\\.github/workflows/.*\\.ya?ml$/"],
       "matchStrings": [
-        "version=(?<currentValue>v\\d+\\.\\d+\\.\\d+)\\s*\\n\\s*curl[^\"\\n]+norwoodj/helm-docs"
+        "version=(?<currentValue>v\\d+\\.\\d+\\.\\d+)\\s*\\n\\s*curl[^\\n]+norwoodj/helm-docs"
       ],
       "depNameTemplate": "norwoodj/helm-docs",
       "datasourceTemplate": "github-releases"
