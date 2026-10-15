@@ -352,7 +352,7 @@ KUSTOMIZE_VERSION ?= v5.8.1
 CONTROLLER_TOOLS_VERSION ?= v0.21.0
 # Keep aligned with the github.com/onsi/ginkgo/v2 version in go.mod —
 # the ginkgo CLI's parallel runner needs to match the library's
-# internal protocol version.
+# internal protocol version. Renovate bumps both in the same PR.
 GINKGO_VERSION ?= v2.33.1
 
 #ENVTEST_VERSION is the version of controller-runtime release branch to fetch the envtest setup script (i.e. release-0.20)
@@ -365,6 +365,8 @@ ENVTEST_K8S_VERSION ?= $(shell v='$(call gomodver,k8s.io/api)'; \
   [ -n "$$v" ] || { echo "Set ENVTEST_K8S_VERSION manually (k8s.io/api replace has no tag)" >&2; exit 1; }; \
   printf '%s\n' "$$v" | sed -E 's/^v?[0-9]+\.([0-9]+).*/1.\1/')
 
+# Keep aligned with the golangci-lint version in .github/workflows/lint.yml.
+# Renovate bumps both in the same PR.
 GOLANGCI_LINT_VERSION ?= v2.14.0
 KO_VERSION ?= v0.18.1
 .PHONY: kustomize

@@ -87,6 +87,20 @@
       "matchPackageNames": ["norwoodj/helm-docs"],
       "groupName": "helm-docs",
       "schedule": ["after 1am and before 7am on monday"]
+    },
+    {
+      "matchManagers": ["custom.regex"],
+      "matchPackageNames": ["golangci/golangci-lint"],
+      "groupName": "github actions",
+      "schedule": ["after 1am and before 7am on monday"],
+      "description": "The Makefile's GOLANGCI_LINT_VERSION must move with the golangci-lint version the Lint workflow passes to golangci-lint-action (tracked by the github-actions manager under the same package name), so `make lint` reproduces CI. Sharing the group puts both bumps in one PR — PR #46 had to fix the Makefile by hand when only the workflow moved."
+    },
+    {
+      "matchManagers": ["custom.regex"],
+      "matchPackageNames": ["github.com/onsi/ginkgo/v2"],
+      "groupName": "go module patch+minor",
+      "schedule": ["after 1am and before 7am on monday"],
+      "description": "The Makefile's GINKGO_VERSION (the ginkgo CLI that `make test-e2e` runs with --procs) must match github.com/onsi/ginkgo/v2 in go.mod, since the parallel runner talks to the library over an internal protocol. Sharing the gomod group puts both bumps in one PR — PR #49 found the CLI four minors behind."
     }
   ],
   "customManagers": [
@@ -109,6 +123,26 @@
       ],
       "depNameTemplate": "kubernetes-sigs/kind",
       "datasourceTemplate": "github-releases"
+    },
+    {
+      "customType": "regex",
+      "description": "Bump GOLANGCI_LINT_VERSION pinned in the Makefile (grouped with the Lint workflow's golangci-lint version, see packageRules).",
+      "managerFilePatterns": ["/^Makefile$/"],
+      "matchStrings": [
+        "GOLANGCI_LINT_VERSION \\?= (?<currentValue>v\\d+\\.\\d+\\.\\d+)"
+      ],
+      "depNameTemplate": "golangci/golangci-lint",
+      "datasourceTemplate": "github-releases"
+    },
+    {
+      "customType": "regex",
+      "description": "Bump GINKGO_VERSION (ginkgo CLI) pinned in the Makefile (grouped with github.com/onsi/ginkgo/v2 in go.mod, see packageRules).",
+      "managerFilePatterns": ["/^Makefile$/"],
+      "matchStrings": [
+        "GINKGO_VERSION \\?= (?<currentValue>v\\d+\\.\\d+\\.\\d+)"
+      ],
+      "depNameTemplate": "github.com/onsi/ginkgo/v2",
+      "datasourceTemplate": "go"
     }
   ],
   "vulnerabilityAlerts": {
