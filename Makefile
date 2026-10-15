@@ -353,7 +353,7 @@ CONTROLLER_TOOLS_VERSION ?= v0.21.0
 # Keep aligned with the github.com/onsi/ginkgo/v2 version in go.mod —
 # the ginkgo CLI's parallel runner needs to match the library's
 # internal protocol version.
-GINKGO_VERSION ?= v2.29.0
+GINKGO_VERSION ?= v2.33.1
 
 #ENVTEST_VERSION is the version of controller-runtime release branch to fetch the envtest setup script (i.e. release-0.20)
 ENVTEST_VERSION ?= $(shell v='$(call gomodver,sigs.k8s.io/controller-runtime)'; \
