@@ -367,7 +367,7 @@ ENVTEST_K8S_VERSION ?= $(shell v='$(call gomodver,k8s.io/api)'; \
 
 # Keep aligned with the golangci-lint version in .github/workflows/lint.yml.
 # Renovate bumps both in the same PR.
-GOLANGCI_LINT_VERSION ?= v2.14.0
+GOLANGCI_LINT_VERSION ?= v2.15.0
 KO_VERSION ?= v0.18.1
 .PHONY: kustomize
 kustomize: $(KUSTOMIZE) ## Download kustomize locally if necessary.
